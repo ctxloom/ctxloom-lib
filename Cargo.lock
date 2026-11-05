@@ -1254,8 +1254,10 @@ dependencies = [
 name = "project-dir"
 version = "0.1.0"
 dependencies = [
+ "angzarr-diagnostic",
  "file-system",
- "process-env",
+ "mutants",
+ "os",
 ]
 
 [[package]]

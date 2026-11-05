@@ -1,15 +1,29 @@
 [package]
 name = "project-dir"
 version = "0.1.0"
-description = "The project-root rule over the filesystem seam and the environment snapshot."
+description = "The mechanics of finding a project's root and its per-project directory: the ancestor walk with injected rules, and the checked project id."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
 [dependencies]
+angzarr-diagnostic.workspace = true
 file-system.workspace = true
-process-env.workspace = true
+
+[dev-dependencies]
+file-system = { workspace = true, features = ["test-support"] }
+mutants.workspace = true
+os.workspace = true
+
+[build-dependencies]
+# The build writes the catalog's source under the crate's name
+# (angzarr_diagnostic::build): no catalog spells its crate's name.
+angzarr-diagnostic = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true
+
+[features]
+# `diagnostic_samples`, for other crates' catalog tests.
+test-support = []
