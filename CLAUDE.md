@@ -47,15 +47,18 @@ Not inline `mod tests { ... }`, and not a `tests/` directory.
 
 Every crate lives at `crates/<ring>/<role>/<crate>`. The ring and role are
 the architecture; there is no other table of crates. This repository is
-adapters and root helpers, so far:
+adapters, root helpers and a little pure core, so far:
 
 - `adapters/driven`: port implementations over the filesystem, the store.
 - `adapters/driving`: the CLI edge's shims: translation only.
 - `root/lib`: helpers for a binary's composition root.
 
-A `core/` ring (`core/domain`, `core/ports`, ...) appears only if a crate
-needs it; the core's purity rules (`crates/core/clippy.toml`, repeating the
-root's, kept equal by `just lint`) arrive with it. A crate takes plain
+- `core/domain`: pure computation (no I/O, clock or environment; "now"
+  arrives as an argument or a factory): `duration-text`, the grammar of a
+  span or a date as text. The core's purity rules (`crates/core/clippy.toml`)
+  repeat the root's, since clippy reads the nearest `clippy.toml`; `just lint`
+  checks the nesting threshold and every OS-rule entry are in it. A further
+  core role (`core/ports`, ...) appears only if a crate needs it. A crate takes plain
 `&str` and `Path` arguments, never a consumer's type, so no consumer type
 can leak in. `templates/` is not a crate: files consumers copy.
 
@@ -139,7 +142,7 @@ never `--no-verify`, and never weaken a gate to get through.
 
 No git hook runs mutation testing. Before a batch of work reaches `main`,
 `just mutants-staged` runs over the whole batch's diff (staged against the
-batch's base) and passes: every hand-written tier (`crates/adapters`,
+batch's base) and passes: every hand-written tier (`crates/core`, `crates/adapters`,
 `crates/root/lib`) at 90% or more (the justfile's `mutation_thresholds`).
 Each mutant runs only its own crate's tests (`.cargo/mutants.toml`), so a
 crate kills its own mutants. A mutant judged equivalent or untestable gets

@@ -33,6 +33,7 @@ config-layers = { path = "crates/adapters/driven/config-layers" }
 sqlite-store-opener = { path = "crates/adapters/driven/sqlite-store-opener" }
 process-env = { path = "crates/root/lib/process-env" }
 project-dir = { path = "crates/adapters/driven/project-dir" }
+duration-text = { path = "crates/core/domain/duration-text" }
 
 # The command-line parser and the serializer the CLI shims read and write with.
 clap = "4.5"

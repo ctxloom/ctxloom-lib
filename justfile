@@ -31,8 +31,9 @@ features_prepare := ""
 # are stated. A mutant is judged by the longest prefix its file matches; one
 # matching none fails the gate, so a new tier gets a threshold before it gets
 # code. This repository has no domain, so its hand-written tiers are the
-# adapters and the root's helper libraries, all at 90.
-mutation_thresholds := "crates/adapters=90 crates/root/lib=90"
+# core (pure computation), the adapters and the root's helper libraries, all
+# at 90.
+mutation_thresholds := "crates/core=90 crates/adapters=90 crates/root/lib=90"
 
 # Staged paths outside any crate that can change what every crate builds or
 # tests (bash globs, `*` crossing `/`): one of these staged tests the whole
@@ -58,6 +59,15 @@ lint: lint-vocab lint-os selftest-gate-kit
     #!/usr/bin/env bash
     set -euo pipefail
     {{TOP}}/scripts/clippy-sync-check.sh --exact {{TOP}}/clippy.toml {{TOP}}/templates/clippy-disallowed.toml
+    # Clippy reads only the nearest clippy.toml, so the core's repeats the
+    # root's nesting threshold and every entry of the OS and filesystem rule.
+    {{TOP}}/scripts/clippy-sync-check.sh {{TOP}}/crates/core/clippy.toml {{TOP}}/templates/clippy-disallowed.toml
+    root=$(grep '^excessive-nesting-threshold' {{TOP}}/clippy.toml)
+    core=$(grep '^excessive-nesting-threshold' {{TOP}}/crates/core/clippy.toml)
+    if [ "$root" != "$core" ]; then
+        echo "FAIL lint: clippy.toml ($root) and crates/core/clippy.toml ($core) disagree on nesting" >&2
+        exit 1
+    fi
     terse=(-q --message-format=short)
     [ "${VERBOSE:-}" = 1 ] && terse=()
     exec just --justfile {{TOP}}/justfile _run lint workspace cargo \

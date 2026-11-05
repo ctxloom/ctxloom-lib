@@ -18,11 +18,31 @@ arguments.
 | `sqlite-store-opener` | `crates/adapters/driven/sqlite-store-opener` | places and opens a project's SQLite event store |
 | `process-env` | `crates/root/lib/process-env` | the once-read snapshot of the process environment |
 | `project-dir` | `crates/adapters/driven/project-dir` | the project-root rule over the filesystem seam |
+| `duration-text` | `crates/core/domain/duration-text` | the grammar of a span (`1h30m`, `1.5d`) or a date as text: parse, cutoff, age and exact comparison, over std's `Duration` and `SystemTime` |
 
-Today `cli-support` holds code (the call with an application-owned `globals`, the failure and its exit codes, the notices, the failure reporter, the argument readers); the others are stubs, and their code arrives slice by slice.
+`duration-text` holds code too (pure; see below). Today `cli-support` holds code (the call with an application-owned `globals`, the failure and its exit codes, the notices, the failure reporter, the argument readers); the others are stubs, and their code arrives slice by slice.
 
 `templates/` holds files consumers copy (the OS and filesystem clippy rule);
 it is not a crate.
+
+## duration-text
+
+`1h30m`, `2w1d`, `1.5d`, `0d`: units `s m h d w` (fixed lengths), longest to
+shortest, each once; fractions; no bare number, sign or inner space. A
+cutoff is a span before now or a `YYYY-MM-DD` date at 00:00 UTC. The crate
+reads no clock: build a `DurationText` over a closure on your own clock (or a
+fixed `SystemTime` in tests), and `frozen()` it to judge many items against
+one instant.
+
+```rust
+use std::time::{Duration, SystemTime};
+use duration_text::{Comparison, DurationText};
+
+// `clock.now()` is the application's own clock seam, converted to std.
+let spans = DurationText::new(|| SystemTime::from(clock.now())).frozen();
+let cutoff = spans.cutoff("30d")?;           // or "2026-01-01"
+let old = spans.age_is(created, Comparison::AtLeast, spans.parse("1.5h")?);
+```
 
 ## Using it
 

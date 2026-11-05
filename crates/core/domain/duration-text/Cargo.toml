@@ -1,0 +1,26 @@
+[package]
+name = "duration-text"
+version = "0.1.0"
+description = "The grammar of a span written as text (1h30m, 1.5d) or a date, as an age or a cutoff"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+angzarr-diagnostic.workspace = true
+
+[dev-dependencies]
+mutants.workspace = true
+
+[build-dependencies]
+# The build writes the catalog's source under the crate's name
+# (angzarr_diagnostic::build): no catalog spells its crate's name.
+angzarr-diagnostic = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true
+
+[features]
+# `diagnostic_samples`, for other crates' catalog tests.
+test-support = []

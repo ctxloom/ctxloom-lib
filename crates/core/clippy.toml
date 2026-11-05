@@ -1,0 +1,88 @@
+# Rules for every crate under crates/core: pure computation. Clippy reads the
+# nearest clippy.toml up from a crate's directory, so this file reaches every
+# core crate, and a crate's own clippy.toml would replace it, not add to it.
+#
+# The core does no I/O and is deterministic: the same inputs give the same
+# result. Time, configuration, randomness and the outside world enter as
+# arguments (a caller passes "now"; the crate never reads a clock).
+
+# Clippy does not merge configs, so the workspace's own settings are repeated
+# here; `just lint` checks the nesting line matches the root clippy.toml's and
+# that every entry of the OS and filesystem rule is here too.
+excessive-nesting-threshold = 6
+
+disallowed-methods = [
+  { path = "std::time::SystemTime::now", reason = "the core reads no clock: the caller passes now" },
+  { path = "std::time::Instant::now", reason = "the core reads no clock" },
+  { path = "std::env::args", reason = "arguments belong to a driving adapter" },
+  { path = "std::process::Command::new", reason = "processes are adapters' business" },
+  { path = "std::thread::spawn", reason = "the core is synchronous" },
+  { path = "std::fs::read", reason = "file I/O goes through the file-system seam: Fs::read" },
+  { path = "std::fs::read_to_string", reason = "file I/O goes through the file-system seam: Fs::read_to_string" },
+  { path = "std::fs::write", reason = "file I/O goes through the file-system seam: Fs::write_atomic" },
+  { path = "std::fs::read_dir", reason = "file I/O goes through the file-system seam: Fs::read_dir" },
+  { path = "std::fs::create_dir", reason = "file I/O goes through the file-system seam: Fs::create_dir_all" },
+  { path = "std::fs::create_dir_all", reason = "file I/O goes through the file-system seam: Fs::create_dir_all" },
+  { path = "std::fs::remove_file", reason = "file I/O goes through the file-system seam: Fs::remove_file" },
+  { path = "std::fs::remove_dir", reason = "file I/O goes through the file-system seam: Fs::remove_dir_all" },
+  { path = "std::fs::remove_dir_all", reason = "file I/O goes through the file-system seam: Fs::remove_dir_all" },
+  { path = "std::fs::rename", reason = "file I/O goes through the file-system seam: Fs::rename" },
+  { path = "std::fs::copy", reason = "file I/O goes through the file-system seam: Fs::read and Fs::write_atomic" },
+  { path = "std::fs::hard_link", reason = "file I/O goes through the file-system seam" },
+  { path = "std::fs::metadata", reason = "file I/O goes through the file-system seam: Fs::metadata" },
+  { path = "std::fs::symlink_metadata", reason = "file I/O goes through the file-system seam: Fs::symlink_metadata" },
+  { path = "std::fs::canonicalize", reason = "file I/O goes through the file-system seam: Fs::canonicalize" },
+  { path = "std::fs::read_link", reason = "file I/O goes through the file-system seam: Fs::read_link" },
+  { path = "std::fs::set_permissions", reason = "file I/O goes through the file-system seam: Fs::set_permissions" },
+  { path = "std::fs::exists", reason = "file I/O goes through the file-system seam: Fs::exists" },
+  { path = "std::fs::File::open", reason = "file I/O goes through the file-system seam: Fs::open" },
+  { path = "std::fs::File::create", reason = "file I/O goes through the file-system seam: Fs::open" },
+  { path = "std::fs::File::create_new", reason = "file I/O goes through the file-system seam: Fs::open" },
+  { path = "std::fs::OpenOptions::open", reason = "file I/O goes through the file-system seam: Fs::open" },
+  { path = "std::os::unix::fs::symlink", reason = "file I/O goes through the file-system seam: Fs::symlink_dir" },
+  { path = "std::os::windows::fs::symlink_dir", reason = "file I/O goes through the file-system seam: Fs::symlink_dir", allow-invalid = true },
+  { path = "std::os::windows::fs::symlink_file", reason = "file I/O goes through the file-system seam", allow-invalid = true },
+  { path = "std::path::Path::exists", reason = "file I/O goes through the file-system seam: Fs::exists" },
+  { path = "std::path::Path::try_exists", reason = "file I/O goes through the file-system seam: Fs::exists" },
+  { path = "std::path::Path::is_file", reason = "file I/O goes through the file-system seam: Fs::metadata" },
+  { path = "std::path::Path::is_dir", reason = "file I/O goes through the file-system seam: Fs::metadata" },
+  { path = "std::path::Path::is_symlink", reason = "file I/O goes through the file-system seam: Fs::symlink_metadata" },
+  { path = "std::path::Path::metadata", reason = "file I/O goes through the file-system seam: Fs::metadata" },
+  { path = "std::path::Path::symlink_metadata", reason = "file I/O goes through the file-system seam: Fs::symlink_metadata" },
+  { path = "std::path::Path::canonicalize", reason = "file I/O goes through the file-system seam: Fs::canonicalize" },
+  { path = "std::path::Path::read_dir", reason = "file I/O goes through the file-system seam: Fs::read_dir" },
+  { path = "std::path::Path::read_link", reason = "file I/O goes through the file-system seam: Fs::read_link" },
+  { path = "tempfile::tempdir", reason = "file I/O goes through the file-system seam: Rooted::temp (a test's own filesystem)" },
+  { path = "tempfile::tempdir_in", reason = "file I/O goes through the file-system seam: Rooted::temp" },
+  { path = "tempfile::TempDir::new", reason = "file I/O goes through the file-system seam: Rooted::temp" },
+  { path = "tempfile::tempfile", reason = "file I/O goes through the file-system seam" },
+  { path = "tempfile::NamedTempFile::new", reason = "file I/O goes through the file-system seam: Fs::write_atomic" },
+  { path = "tempfile::NamedTempFile::new_in", reason = "file I/O goes through the file-system seam: Fs::write_atomic" },
+  { path = "tempfile::Builder::tempdir", reason = "file I/O goes through the file-system seam: Rooted::temp" },
+  { path = "tempfile::Builder::tempfile", reason = "file I/O goes through the file-system seam" },
+  # The process environment is read once, at a program's composition root, into
+  # process-env's EnvSnapshot (EnvSnapshot::from_process, the one allowed site);
+  # everything else is handed the snapshot, so a test builds one of its own
+  # instead of setting the process's variables and working directory.
+  { path = "std::env::var", reason = "the environment is read once into process-env's EnvSnapshot: EnvSnapshot::utf8" },
+  { path = "std::env::var_os", reason = "the environment is read once into process-env's EnvSnapshot: EnvSnapshot::var" },
+  { path = "std::env::vars", reason = "the environment is read once into process-env's EnvSnapshot: EnvSnapshot::vars_utf8" },
+  { path = "std::env::vars_os", reason = "the environment is read once into process-env's EnvSnapshot: EnvSnapshot::vars" },
+  { path = "std::env::current_dir", reason = "the working directory is read once into process-env's EnvSnapshot: EnvSnapshot::cwd" },
+  { path = "std::env::temp_dir", reason = "the temporary directory is read once into process-env's EnvSnapshot: EnvSnapshot::temp_dir" },
+  { path = "std::env::home_dir", reason = "the home is read once into process-env's EnvSnapshot: EnvSnapshot::home" },
+  { path = "std::env::set_var", reason = "the process's environment is read, never written: a test builds an EnvSnapshot of its own" },
+  { path = "std::env::remove_var", reason = "the process's environment is read, never written: a test builds an EnvSnapshot of its own" },
+  { path = "std::env::set_current_dir", reason = "the process's working directory is read, never changed: a test builds an EnvSnapshot of its own" },
+]
+
+disallowed-types = [
+  { path = "std::collections::HashMap", reason = "iteration order is not deterministic: use BTreeMap" },
+  { path = "std::collections::HashSet", reason = "iteration order is not deterministic: use BTreeSet" },
+  { path = "std::time::Instant", reason = "the core reads no clock" },
+  { path = "std::fs::File", reason = "the core does no I/O" },
+  { path = "std::fs::OpenOptions", reason = "the core does no I/O" },
+  { path = "std::net::TcpStream", reason = "the core does no I/O" },
+  { path = "std::net::TcpListener", reason = "the core does no I/O" },
+  { path = "std::net::UdpSocket", reason = "the core does no I/O" },
+]
