@@ -1,0 +1,6 @@
+# Git hooks, managed by lefthook (`just hooks-install`). The gates are
+# gates/lefthook.yml; ctxloom-lib's parameters for them are in its justfile.
+# Mutation testing is in no hook: it is a by-hand, required close-out step
+# (CLAUDE.md).
+extends:
+  - gates/lefthook.yml
