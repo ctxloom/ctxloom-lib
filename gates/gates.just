@@ -765,7 +765,13 @@ _run gate scope extractor +command:
     extract=$(just --justfile '{{gates_root}}/justfile' _extract-"$extractor" "$log" "$rc" 2>&1) || true
     printf 'FAIL %s: %s (full log: target/logs/%s.log)\n' "$gate" "${extract%%$'\n'*}" "$gate" >&2
     if [ "${VERBOSE:-}" != 1 ] && [[ $extract == *$'\n'* ]]; then
-        printf '%s\n' "${extract#*$'\n'}" >&2
+        # At most GATE_EXTRACT_MAX lines (default 40) of extract: the rest is
+        # in the log, named by the FAIL line.
+        body=${extract#*$'\n'}
+        cap=${GATE_EXTRACT_MAX:-40}
+        total=$(grep -c '' <<< "$body")
+        printf '%s\n' "$body" | head -n "$cap" >&2
+        [ "$total" -le "$cap" ] || printf '+%d more lines, see the log\n' $((total - cap)) >&2
     fi
     exit "$rc"
 
@@ -773,7 +779,8 @@ _run gate scope extractor +command:
 # then the part of the log worth reading. Each gate runs its tool in a terse
 # or structured mode, so an extract is that output, not a search of prose.
 
-# cargo build/clippy with --message-format=short: a line per diagnostic.
+# cargo build/clippy with --message-format=short: a line per diagnostic. Only
+# the diagnostics (file:line:col: error|warning: message), the first 20.
 [positional-arguments]
 _extract-cargo log rc:
     #!/usr/bin/env bash
@@ -784,7 +791,11 @@ _extract-cargo log rc:
         1) echo "1 error" ;;
         *) echo "$errors errors" ;;
     esac
-    cat "$1"
+    diag=$(grep -E '^[^ ]+:[0-9]+:[0-9]+: (error|warning)|^error(\[[A-Z0-9]+\])?: ' "$1" || true)
+    if [ -z "$diag" ]; then tail -n 20 "$1"; exit 0; fi
+    head -n 20 <<< "$diag"
+    total=$(grep -c '' <<< "$diag")
+    [ "$total" -le 20 ] || echo "+$((total - 20)) more, see the log"
 
 # rustfmt -l: a line per file it would change.
 [positional-arguments]
@@ -813,7 +824,13 @@ _extract-tests log rc:
         102) echo "doc tests failed: $(grep -m1 -E '^test result: FAILED' "$1" || echo 'see the log')" ;;
         *) echo "the test run failed (exit $2)" ;;
     esac
-    cat "$1"
+    # The failing tests' names first (never a passing one), then their output;
+    # `_run` caps the whole.
+    grep -E '^ +(FAIL|SIGABRT|TIMEOUT|SIGSEGV) ' "$1" | sed 's/^ *//; s/ *\[[^]]*\] */ /' | sort -u | head -n 15 || true
+    # The panic and assertion output only: the harness chatter, separators,
+    # run header, per-test banners (the thread line names the test), blank
+    # lines and the backtrace hint are dropped.
+    grep -vE '^ +(PASS|SLOW|LEAK|START|Starting|Compiling|Finished|FAIL|SIGABRT|TIMEOUT|SIGSEGV|Summary|Nextest run)|^─+$|^ +(stdout|stderr) ─|^ *running [0-9]+ tests?$|^ *test .* \.\.\. (FAILED|ok)$|^ *failures:$|^ *tests::|^ *test result:|RUST_BACKTRACE|^ *$' "$1" || true
 
 # cargo-deny: its own rendering at error level, without the inclusion graphs,
 # offline, from the database the run just fetched; its last line is deny's
@@ -846,8 +863,10 @@ _extract-mutants log rc:
     if [ -s "$dir/verdict.txt" ]; then cat "$dir/verdict.txt"; else echo "cargo mutants failed (exit $2)"; fi
     missed=$dir/mutants.out/missed.txt timeout=$dir/mutants.out/timeout.txt
     if [ -s "$missed" ]; then
-        echo "surviving mutants (no test failed with the change applied):"
-        sed 's/^/  /' "$missed"
+        n=$(grep -c . "$missed")
+        echo "surviving mutants ($n; no test failed with the change applied):"
+        head -n 15 "$missed" | sed 's/^/  /'
+        [ "$n" -le 15 ] || echo "  +$((n - 15)) more: target/logs/mutants-staged/mutants.out/missed.txt"
     fi
     if [ -s "$timeout" ]; then
         echo "timed out (counted killed):"

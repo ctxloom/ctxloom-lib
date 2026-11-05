@@ -7,10 +7,31 @@ these files; the copies are independent. Nothing here is linked.
 |---|---|---|
 | `clippy-disallowed.toml` | the `disallowed-methods` array into `clippy.toml` | the canonical OS and filesystem rule, each group commented with why |
 | `os-gates.just` | `gates/os-gates.just`, then `import` it | `lint-os`, `lint-clippy-sync`, `check-windows` |
+| `ltk-rules.yaml` | `.ltk/config.yaml` | ltk rules sending raw cargo, nextest, rustc, lefthook, gitleaks and mutation-testing runs to the just recipes, and blocking every way to skip the hooks (`--no-verify`, `-n`, `core.hooksPath`, `env LEFTHOOK=`/`SKIP=`); tested by `../scripts/ltk-rules.selftest.sh` |
 | `ci.yml` | `.github/workflows/ci.yml` | Linux gates plus a native Windows build and test |
 | `../scripts/os-cfg-check.sh` | `scripts/` | no OS-naming cfg, `cfg!(`, `std::os::`, `split_paths` or target dependency under `crates/` |
 | `../scripts/os-cfg-allow.txt` | `scripts/` | the seam: one `<file> \| <text on the line> \| <why>` per exception (empty by default; a stale entry fails) |
 | `../scripts/clippy-sync-check.sh` | `scripts/` | fails when a `clippy.toml` lacks an entry of the template |
+
+## ltk rules
+
+`ltk-rules.yaml` goes to `.ltk/config.yaml` (merge with existing rules; ids
+must be unique). Its suggestions name the gate-kit's recipes plus `run`,
+`clean-target` and `mutants-batch`, which a consumer adds or renames. A rule's
+`match.command` is an ordered subsequence of the command's non-option
+arguments, so the specific subcommands (`cargo deny check`, `cargo mutants`)
+come before the generic ones (`cargo build|check`). ltk unwraps `bash -c`,
+`env`, `setsid nohup` and absolute paths, so those spellings are caught; it
+cannot see a bare `VAR=x git commit` prefix, `export`, or `sudo`'s command.
+`scripts/ltk-rules.selftest.sh [config]` runs 56 sample commands through
+`ltk check` (blocked and allowed) and fails on any wrong verdict. Mutation
+testing is meant to run only through the recipes; the rules block every raw
+spelling of `cargo mutants`.
+
+The gates' failure output is capped for an agent's context: a pass is one
+`ok` line, a failure its `FAIL` line and at most 40 lines of extract (failing
+tests only, the first 20 diagnostics, 15 survivors, each with a `+K more`
+tail); `scripts/output-budget.selftest.sh` checks that on a fixture workspace.
 
 ## Adopting
 

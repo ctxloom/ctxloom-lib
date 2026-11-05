@@ -59,6 +59,7 @@ lint: lint-vocab lint-os selftest-gate-kit
     #!/usr/bin/env bash
     set -euo pipefail
     {{TOP}}/scripts/clippy-sync-check.sh --exact {{TOP}}/clippy.toml {{TOP}}/templates/clippy-disallowed.toml
+    {{TOP}}/scripts/output-budget.selftest.sh
     # Clippy reads only the nearest clippy.toml, so the core's repeats the
     # root's nesting threshold and every entry of the OS and filesystem rule.
     {{TOP}}/scripts/clippy-sync-check.sh {{TOP}}/crates/core/clippy.toml {{TOP}}/templates/clippy-disallowed.toml
@@ -95,3 +96,9 @@ hooks-install:
 [no-exit-message]
 test-pkg +packages: (_require-nextest "test-pkg")
     @just --justfile '{{TOP}}/justfile' _run test-pkg "{{packages}}" tests just --justfile '{{TOP}}/justfile' _tests {{packages}}
+
+# The ltk rules template (templates/ltk-rules.yaml) against sample commands:
+# needs ltk on PATH (`go install`), so it is not part of `lint`, which CI runs.
+[no-exit-message]
+selftest-ltk:
+    @{{TOP}}/scripts/ltk-rules.selftest.sh
