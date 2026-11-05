@@ -55,6 +55,8 @@ fn the_codes_and_args_are_stable() {
     ];
     for (error, code, arg) in cases {
         assert_eq!(error.code(), code);
+        assert_eq!(error.static_code(), code);
+        assert_eq!(error.id(), arg);
         let args = error.args();
         match arg {
             None => assert!(args.is_empty()),

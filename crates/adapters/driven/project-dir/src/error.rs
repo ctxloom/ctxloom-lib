@@ -34,8 +34,10 @@ impl fmt::Display for ProjectDirError {
 
 impl std::error::Error for ProjectDirError {}
 
-impl Diagnostic for ProjectDirError {
-    fn code(&self) -> &str {
+impl ProjectDirError {
+    /// The error's code, for a caller that must hold it past the error (a
+    /// store's cause, which names its code as a `&'static str`).
+    pub fn static_code(&self) -> &'static str {
         match self {
             Self::IdEmpty => code!("id-empty"),
             Self::IdNul { .. } => code!("id-nul"),
@@ -45,14 +47,25 @@ impl Diagnostic for ProjectDirError {
         }
     }
 
-    fn args(&self) -> Vec<(&str, Arg)> {
+    /// The id the error refused, `None` for the empty one.
+    pub fn id(&self) -> Option<&str> {
         match self {
-            Self::IdEmpty => vec![],
+            Self::IdEmpty => None,
             Self::IdNul { id }
             | Self::IdAbsolute { id }
             | Self::IdSeparator { id }
-            | Self::IdRelative { id } => vec![("id", id.as_str().into())],
+            | Self::IdRelative { id } => Some(id),
         }
+    }
+}
+
+impl Diagnostic for ProjectDirError {
+    fn code(&self) -> &str {
+        self.static_code()
+    }
+
+    fn args(&self) -> Vec<(&str, Arg)> {
+        self.id().map(|id| ("id", id.into())).into_iter().collect()
     }
 }
 
