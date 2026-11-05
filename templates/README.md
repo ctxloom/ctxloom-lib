@@ -40,3 +40,10 @@ Windows ones `allow-invalid`, since they do not resolve elsewhere), the
 `Path` methods that touch the disk, and `tempfile`'s constructors are
 disallowed; `Path` arithmetic (`join`, `parent`, `file_name`) does no I/O and
 stays allowed. A test that needs a real file uses `Rooted::temp`.
+
+The process environment is the same kind of seam: `std::env::var`, `var_os`,
+`vars`, `vars_os`, `current_dir`, `temp_dir`, `home_dir` and the writers
+(`set_var`, `remove_var`, `set_current_dir`) are disallowed. A program reads
+the environment once, at its composition root, with `process-env`'s
+`EnvSnapshot::from_process` (the one `#[allow(clippy::disallowed_methods)]`
+site) and hands the snapshot down; a test builds one with `EnvSnapshot::of`.

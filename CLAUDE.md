@@ -64,7 +64,8 @@ can leak in. `templates/` is not a crate: files consumers copy.
 All file I/O goes through angzarr-platform's `file-system` (`Fs`), and what
 differs between operating systems lives in its `os` crate. `clippy.toml`
 disallows the `std::fs`, `std::path::Path` and `tempfile` methods that
-bypass it. The same list is `templates/clippy-disallowed.toml`, the canonical copy
+bypass it, and the `std::env` reads and writes: the environment is read once
+into `process-env`'s `EnvSnapshot`, the only allowed site. The same list is `templates/clippy-disallowed.toml`, the canonical copy
 consumers take; `just lint` refuses to run if the two disagree, and a consumer
 checks its own with `just lint-clippy-sync`. `just lint-os` (`scripts/os-cfg-check.sh`)
 keeps OS-naming cfgs out of `crates/`; the gate-kit (`templates/README.md`) says

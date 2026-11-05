@@ -22,8 +22,8 @@ expect 0 "a copy, exact" --exact "$work/in-sync.toml" "$template"
 grep -v 'std::fs::read_to_string' "$work/in-sync.toml" > "$work/missing.toml"
 expect 1 "an entry missing" "$work/missing.toml" "$template"
 
-sed 's/^]$/  { path = "std::env::var", reason = "the consumer'"'"'s own" },\n]/' "$work/in-sync.toml" > "$work/extra.toml"
-grep -q std::env::var "$work/extra.toml"
+sed 's/^]$/  { path = "std::process::exit", reason = "the consumer'"'"'s own" },\n]/' "$work/in-sync.toml" > "$work/extra.toml"
+grep -q std::process::exit "$work/extra.toml"
 expect 0 "an extra entry of the consumer's own" "$work/extra.toml" "$template"
 expect 1 "an extra entry, exact" --exact "$work/extra.toml" "$template"
 
