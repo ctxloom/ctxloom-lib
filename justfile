@@ -14,7 +14,7 @@ import 'templates/os-gates.just'
 
 # What templates/os-gates.just takes from this justfile (sqlite-store-opener is
 # left out of check-windows: its SQLite build needs a mingw C compiler).
-windows_packages := "-p project-dir -p process-env -p config-layers"
+windows_packages := "-p project-dir -p run-within -p process-env -p config-layers"
 clippy_template := TOP / "templates/clippy-disallowed.toml"
 
 # The staged tree is a sibling of the checkout, not under target/: cargo

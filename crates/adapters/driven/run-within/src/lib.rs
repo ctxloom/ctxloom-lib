@@ -1,0 +1,361 @@
+//! Run a program under a deadline, and get its output however it ends.
+//!
+//! A program run with its output read through pipes can hang its caller in
+//! two ways, and this crate closes both:
+//!
+//! - A program that outlives its deadline is killed with everything it
+//!   started ([`os::process::Tree::kill_tree`]), not only the program: a
+//!   shell's `sleep`, a git hook, a helper daemon would otherwise live on
+//!   holding the pipes.
+//! - A pipe reaches its end only when every process holding its write end
+//!   has closed it, so a descendant that outlives a program that exited
+//!   normally holds a reader of the pipe forever. The wait for the readers
+//!   is therefore bounded: after the program has exited or been killed, they
+//!   get [`Within::drain_grace`] more, and are then abandoned (they end when
+//!   the descendant closes the pipe) with [`Outcome::drain_incomplete`] set
+//!   and what they had read so far. This is Go's `Cmd.WaitDelay`.
+//!
+//! Stdout and stderr are kept apart, each up to [`Within::max_bytes`]
+//! ([`Outcome::truncated`] says some was discarded); there are no files.
+//!
+//! The environment is exactly the [`Spec`]'s: the caller says every
+//! variable, so nothing of the caller's own leaks in.
+//!
+//! Limits, from [`os::process`]: a descendant that leaves the process
+//! group (`setsid`, `setpgid`) or the job object escapes the kill; and the
+//! program runs in a process group of its own, so a Ctrl-C at the terminal
+//! does not reach it. A caller that wants it to stop on Ctrl-C hears the
+//! signal itself ([`os::Os::stop_signal`]) and ends the tree; this crate
+//! returns only when its program is over.
+//!
+//! A program that exited normally and left a descendant running is not
+//! killed: the descendant may be meant to stay.
+//!
+//! With the `test-support` feature (and in this crate's own tests), a spawn
+//! that fails with ETXTBSY is retried until it does not, and
+//! [`install_script`] writes a script to run. The retry is not in a
+//! production build.
+
+mod capture;
+mod error;
+#[cfg(any(test, feature = "test-support"))]
+mod script;
+
+use std::ffi::{OsStr, OsString};
+use std::io::Write;
+use std::path::PathBuf;
+use std::process::{Command, ExitStatus, Stdio};
+use std::sync::mpsc::{self, Receiver};
+use std::time::{Duration, Instant};
+
+use os::process::{spawn_tree, Tree};
+
+#[cfg(any(test, feature = "test-support"))]
+pub use error::diagnostic_samples;
+pub use error::{RunError, EN_US};
+#[cfg(any(test, feature = "test-support"))]
+pub use script::install_script;
+
+/// How often the program is asked whether it has exited, when nothing else
+/// wakes the wait.
+const POLL: Duration = Duration::from_millis(5);
+
+/// What to run: the program, its arguments, its whole environment, where, and
+/// what it is fed.
+#[derive(Clone, Debug)]
+pub struct Spec {
+    program: OsString,
+    args: Vec<OsString>,
+    env: Vec<(OsString, OsString)>,
+    cwd: Option<PathBuf>,
+    stdin: Option<Vec<u8>>,
+}
+
+impl Spec {
+    /// `program` (a path, or a name looked up on the `PATH` of the
+    /// environment of the caller, not of the program), with no arguments, an
+    /// EMPTY environment, the caller's working directory and no input.
+    pub fn new(program: impl Into<OsString>) -> Spec {
+        Spec {
+            program: program.into(),
+            args: Vec::new(),
+            env: Vec::new(),
+            cwd: None,
+            stdin: None,
+        }
+    }
+
+    /// Add arguments.
+    pub fn args<I, S>(mut self, args: I) -> Spec
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        self.args
+            .extend(args.into_iter().map(|a| a.as_ref().to_os_string()));
+        self
+    }
+
+    /// Add environment variables. The program sees these and no others; a
+    /// later value for a name replaces an earlier one.
+    pub fn envs<I, K, V>(mut self, vars: I) -> Spec
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        for (key, value) in vars {
+            let key = key.as_ref().to_os_string();
+            self.env.retain(|(k, _)| *k != key);
+            self.env.push((key, value.as_ref().to_os_string()));
+        }
+        self
+    }
+
+    /// The directory to run in.
+    pub fn current_dir(mut self, dir: impl Into<PathBuf>) -> Spec {
+        self.cwd = Some(dir.into());
+        self
+    }
+
+    /// Bytes to feed the program's stdin, which is then closed. Without
+    /// them its stdin is closed from the start (the null device).
+    pub fn stdin(mut self, bytes: impl Into<Vec<u8>>) -> Spec {
+        self.stdin = Some(bytes.into());
+        self
+    }
+
+    fn command(&self) -> Command {
+        let mut command = Command::new(&self.program);
+        command
+            .args(&self.args)
+            .env_clear()
+            .envs(self.env.iter().map(|(k, v)| (k, v)))
+            .stdin(if self.stdin.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        if let Some(dir) = &self.cwd {
+            command.current_dir(dir);
+        }
+        command
+    }
+
+    fn name(&self) -> String {
+        self.program.to_string_lossy().into_owned()
+    }
+}
+
+/// How long a run has, and how much it may say.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Within {
+    /// How long the program has to exit before its tree is killed.
+    pub deadline: Duration,
+    /// How long, once the program has exited or been killed, the readers of
+    /// its output get to reach the end of the pipes before they are
+    /// abandoned.
+    pub drain_grace: Duration,
+    /// The most of each stream that is kept; the rest is discarded.
+    pub max_bytes: usize,
+}
+
+impl Within {
+    /// The default grace after the program is over.
+    pub const DRAIN_GRACE: Duration = Duration::from_secs(2);
+    /// The default cap on each stream: 64 MiB.
+    pub const MAX_BYTES: usize = 64 * 1024 * 1024;
+
+    /// `deadline` for the program, [`DRAIN_GRACE`](Self::DRAIN_GRACE) for
+    /// its output after, [`MAX_BYTES`](Self::MAX_BYTES) of each stream.
+    pub fn new(deadline: Duration) -> Within {
+        Within {
+            deadline,
+            drain_grace: Self::DRAIN_GRACE,
+            max_bytes: Self::MAX_BYTES,
+        }
+    }
+
+    /// The same, with `grace` to read the output after the program is over.
+    pub fn drain_grace(mut self, grace: Duration) -> Within {
+        self.drain_grace = grace;
+        self
+    }
+
+    /// The same, keeping at most `max` bytes of each stream.
+    pub fn max_bytes(mut self, max: usize) -> Within {
+        self.max_bytes = max;
+        self
+    }
+}
+
+/// How a run ended.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Outcome {
+    /// How the program exited; `None` when it was killed at its deadline.
+    pub status: Option<ExitStatus>,
+    /// What it wrote to stdout, up to the cap.
+    pub stdout: Vec<u8>,
+    /// What it wrote to stderr, up to the cap.
+    pub stderr: Vec<u8>,
+    /// The deadline passed and the tree was killed.
+    pub timed_out: bool,
+    /// Some output beyond the cap was discarded.
+    pub truncated: bool,
+    /// A pipe was still open when the drain grace ended: a process that
+    /// outlived the program still holds it, and any more it writes is lost.
+    pub drain_incomplete: bool,
+}
+
+/// Run `spec` and return how it ended: its exit status or the kill at the
+/// deadline, and its output. A program that exits non-zero is an outcome,
+/// not an error.
+pub fn run_within(spec: &Spec, within: &Within) -> Result<Outcome, RunError> {
+    let mut tree = spawn(spec).map_err(|e| RunError::spawn(spec.name(), e))?;
+    let (done_tx, done_rx) = mpsc::channel();
+    let stdout = capture::start(tree.take_stdout(), within.max_bytes, done_tx.clone());
+    let stderr = capture::start(tree.take_stderr(), within.max_bytes, done_tx);
+    feed(&mut tree, spec);
+    let mut ended = Ended::default();
+    let status = wait(&mut tree, spec, within.deadline, &done_rx, &mut ended)?;
+    let drain_incomplete = !drain(&done_rx, &mut ended, within.drain_grace);
+    let (stdout, cut_out) = stdout.take();
+    let (stderr, cut_err) = stderr.take();
+    Ok(Outcome {
+        timed_out: status.is_none(),
+        status,
+        stdout,
+        stderr,
+        truncated: cut_out || cut_err,
+        drain_incomplete,
+    })
+}
+
+/// How many of the two readers have reached the end of their pipe.
+#[derive(Default)]
+struct Ended(usize);
+
+impl Ended {
+    const BOTH: usize = 2;
+
+    fn both(&self) -> bool {
+        self.0 >= Self::BOTH
+    }
+}
+
+/// Feed the input on a thread of its own, so a program that never reads it
+/// cannot hold the run past its deadline; the thread ends when the program
+/// does, with a broken pipe.
+fn feed(tree: &mut Tree, spec: &Spec) {
+    if let (Some(bytes), Some(mut pipe)) = (spec.stdin.clone(), tree.take_stdin()) {
+        std::thread::spawn(move || {
+            let _ = pipe.write_all(&bytes);
+        });
+    }
+}
+
+/// What [`wait`] asks of a started program: [`Tree`], or a stand-in in a test
+/// that must make the system's calls fail.
+trait Running {
+    fn try_wait(&mut self) -> std::io::Result<Option<ExitStatus>>;
+    fn kill_tree(&mut self) -> std::io::Result<()>;
+}
+
+impl Running for Tree {
+    fn try_wait(&mut self) -> std::io::Result<Option<ExitStatus>> {
+        Tree::try_wait(self)
+    }
+
+    fn kill_tree(&mut self) -> std::io::Result<()> {
+        Tree::kill_tree(self)
+    }
+}
+
+/// Wait for the program to exit: its status, or `None` once the deadline
+/// passed and its tree was killed. Nothing here blocks in a wait that a kill
+/// would have to get past: the program is asked, and the pause between asks
+/// ends early when a reader finishes.
+fn wait(
+    tree: &mut impl Running,
+    spec: &Spec,
+    deadline: Duration,
+    done: &Receiver<()>,
+    ended: &mut Ended,
+) -> Result<Option<ExitStatus>, RunError> {
+    let deadline = Instant::now() + deadline;
+    loop {
+        match tree.try_wait() {
+            Ok(Some(status)) => return Ok(Some(status)),
+            Ok(None) => {}
+            Err(source) => {
+                let _ = tree.kill_tree();
+                return Err(RunError::Wait {
+                    program: spec.name(),
+                    source,
+                });
+            }
+        }
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return tree
+                .kill_tree()
+                .map(|()| None)
+                .map_err(|source| RunError::Kill {
+                    program: spec.name(),
+                    source,
+                });
+        }
+        if done.recv_timeout(left.min(POLL)).is_ok() {
+            ended.0 += 1;
+        }
+    }
+}
+
+/// Wait up to `grace` for the readers to reach the end of their pipes;
+/// whether they both did.
+fn drain(done: &Receiver<()>, ended: &mut Ended, grace: Duration) -> bool {
+    let deadline = Instant::now() + grace;
+    while !ended.both() {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() || done.recv_timeout(left).is_err() {
+            return false;
+        }
+        ended.0 += 1;
+    }
+    true
+}
+
+#[cfg(not(any(test, feature = "test-support")))]
+fn spawn(spec: &Spec) -> std::io::Result<Tree> {
+    spawn_tree(spec.command())
+}
+
+/// Test support: ETXTBSY is waited out, and only ETXTBSY.
+#[cfg(any(test, feature = "test-support"))]
+fn spawn(spec: &Spec) -> std::io::Result<Tree> {
+    retrying_busy(5000, || spawn_tree(spec.command()))
+}
+
+/// `attempt`, again while it fails with "text file busy", up to `tries`
+/// times, then once more whatever the outcome; any other result at once.
+#[cfg(any(test, feature = "test-support"))]
+fn retrying_busy<T>(
+    tries: u32,
+    mut attempt: impl FnMut() -> std::io::Result<T>,
+) -> std::io::Result<T> {
+    for _ in 0..tries {
+        match attempt() {
+            Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy => {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            other => return other,
+        }
+    }
+    attempt()
+}
+
+#[cfg(test)]
+#[path = "lib.test.rs"]
+mod tests;

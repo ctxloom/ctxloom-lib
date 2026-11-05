@@ -18,6 +18,7 @@ arguments.
 | `sqlite-store-opener` | `crates/adapters/driven/sqlite-store-opener` | places and opens a project's SQLite event store |
 | `process-env` | `crates/root/lib/process-env` | the once-read snapshot of the process environment |
 | `project-dir` | `crates/adapters/driven/project-dir` | the project-root rule over the filesystem seam |
+| `run-within` | `crates/adapters/driven/run-within` | run a program under a deadline: its process tree killed, its output bounded, the wait for it bounded |
 | `duration-text` | `crates/core/domain/duration-text` | the grammar of a span (`1h30m`, `1.5d`) or a date as text: parse, cutoff, age and exact comparison, over std's `Duration` and `SystemTime` |
 
 `duration-text` holds code too (pure; see below). Today `cli-support` holds code (the call with an application-owned `globals`, the failure and its exit codes, the notices, the failure reporter, the argument readers); the others are stubs, and their code arrives slice by slice.
