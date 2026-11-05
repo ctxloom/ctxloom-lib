@@ -21,8 +21,12 @@
 os = { path = "../../angzarr/angzarr-platform/crates/os" }
 file-system = { path = "../../angzarr/angzarr-platform/crates/file-system" }
 
-[patch."https://github.com/angzarr-io/angzarr-embedded"]
-angzarr-embedded = { path = "../../angzarr-embedded/crates/angzarr-embedded" }
+# angzarr-embedded (../../angzarr-embedded) is not patched: its checkout is
+# on a line without the `sqlite` feature at the pinned commit. Check out the
+# pinned line there and add
+#   [patch."https://github.com/angzarr-io/angzarr-embedded"]
+#   angzarr-embedded = { path = "../../angzarr-embedded/crates/angzarr-embedded" }
+# when co-developing it.
 
 # angzarr core (angzarr-diagnostic, angzarr-yaml, angzarr-presentation) has no
 # sibling checkout at a fixed path yet; add its [patch] here when it does.
