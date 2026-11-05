@@ -15,7 +15,7 @@ arguments.
 |---|---|---|
 | `cli-support` | `crates/adapters/driving/cli-support` | the driving edge's shared shims |
 | `config-layers` | `crates/adapters/driven/config-layers` | layered configuration intake (env scan, override split, stamp check) |
-| `sqlite-store-opener` | `crates/adapters/driven/sqlite-store-opener` | places and opens a project's SQLite event store |
+| `sqlite-store-opener` | `crates/adapters/driven/sqlite-store-opener` | opens a project's SQLite event store at a caller-named path (to write or read-only), refuses one from before the embedded store, and checks one for damage |
 | `process-env` | `crates/root/lib/process-env` | the once-read snapshot of the process environment |
 | `project-dir` | `crates/adapters/driven/project-dir` | the project-root rule over the filesystem seam |
 | `run-within` | `crates/adapters/driven/run-within` | run a program under a deadline: its process tree killed, its output bounded, the wait for it bounded |
