@@ -19,7 +19,7 @@ arguments.
 | `process-env` | `crates/root/lib/process-env` | the once-read snapshot of the process environment |
 | `project-dir` | `crates/adapters/driven/project-dir` | the project-root rule over the filesystem seam |
 
-Today each is a stub; the code arrives slice by slice.
+Today `cli-support` holds code (the call with an application-owned `globals`, the failure and its exit codes, the notices, the failure reporter, the argument readers); the others are stubs, and their code arrives slice by slice.
 
 `templates/` holds files consumers copy (the OS and filesystem clippy rule);
 it is not a crate.

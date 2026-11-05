@@ -34,6 +34,10 @@ sqlite-store-opener = { path = "crates/adapters/driven/sqlite-store-opener" }
 process-env = { path = "crates/root/lib/process-env" }
 project-dir = { path = "crates/adapters/driven/project-dir" }
 
+# The command-line parser and the serializer the CLI shims read and write with.
+clap = "4.5"
+serde = { version = "1", features = ["derive"] }
+
 # `#[mutants::skip]`, for a mutant judged equivalent.
 mutants = "0.0.4"
 

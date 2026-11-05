@@ -1,7 +1,7 @@
 [package]
 name = "cli-support"
 version = "0.1.0"
-description = "The driving edge's shared shims: the call, the failure and the notices printers."
+description = "What every driving CLI adapter shares: the call, the failure, the notices printer, the failure reporter and the argument helpers"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -10,6 +10,12 @@ publish.workspace = true
 [dependencies]
 angzarr-diagnostic.workspace = true
 angzarr-presentation.workspace = true
+clap.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+angzarr-presentation = { workspace = true, features = ["test-support"] }
+mutants.workspace = true
 
 [lints]
 workspace = true
