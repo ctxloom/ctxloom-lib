@@ -1,0 +1,15 @@
+[package]
+name = "config-layers"
+version = "0.1.0"
+description = "Layered configuration intake: the env scan, the override split and the stamp check."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+angzarr-diagnostic.workspace = true
+angzarr-yaml.workspace = true
+
+[lints]
+workspace = true

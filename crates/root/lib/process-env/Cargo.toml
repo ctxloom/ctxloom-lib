@@ -1,0 +1,14 @@
+[package]
+name = "process-env"
+version = "0.1.0"
+description = "The once-read snapshot of the process environment."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+os.workspace = true
+
+[lints]
+workspace = true

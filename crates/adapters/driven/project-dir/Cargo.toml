@@ -1,0 +1,15 @@
+[package]
+name = "project-dir"
+version = "0.1.0"
+description = "The project-root rule over the filesystem seam and the environment snapshot."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+file-system.workspace = true
+process-env.workspace = true
+
+[lints]
+workspace = true

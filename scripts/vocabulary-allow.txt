@@ -1,0 +1,5 @@
+# The allowed exceptions to `just lint-vocab` (scripts/vocabulary-check.sh): a
+# line under crates/ or templates/ that uses a consumer's word for another
+# meaning. One per line:
+#   <file> | <text on the line> | <why>
+# None today.

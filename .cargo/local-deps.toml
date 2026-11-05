@@ -1,0 +1,28 @@
+# Build the git dependencies of this workspace against local sibling
+# checkouts, while changing one of them and this workspace together:
+#
+#     cp .cargo/local-deps.toml .cargo/config.toml     # on
+#     rm .cargo/config.toml                            # off
+#
+# Cargo reads only .cargo/config.toml, which .gitignore keeps out of every
+# commit, so CI, a fresh clone and the pre-commit gates (whose throwaway tree
+# is a sibling of the checkout, outside it) build the pinned git revisions in
+# Cargo.toml. Paths are relative to the checkout's root.
+#
+# While it is on, Cargo.lock records these crates as path dependencies:
+# restore it (`git checkout Cargo.lock`) before committing, and once the
+# sibling's change is pushed, bump the rev in Cargo.toml instead.
+#
+# The consumers (ctxloom-rs, taskloom) reach THIS repository the same way: their
+# own .cargo/local-deps.toml patches
+# "https://github.com/ctxloom/ctxloom-lib" onto ../ctxloom-lib.
+
+[patch."https://github.com/angzarr-io/angzarr-platform"]
+os = { path = "../../angzarr/angzarr-platform/crates/os" }
+file-system = { path = "../../angzarr/angzarr-platform/crates/file-system" }
+
+[patch."https://github.com/angzarr-io/angzarr-embedded"]
+angzarr-embedded = { path = "../../angzarr-embedded/crates/angzarr-embedded" }
+
+# angzarr core (angzarr-diagnostic, angzarr-yaml, angzarr-presentation) has no
+# sibling checkout at a fixed path yet; add its [patch] here when it does.

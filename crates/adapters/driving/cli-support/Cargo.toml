@@ -1,0 +1,15 @@
+[package]
+name = "cli-support"
+version = "0.1.0"
+description = "The driving edge's shared shims: the call, the failure and the notices printers."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+angzarr-diagnostic.workspace = true
+angzarr-presentation.workspace = true
+
+[lints]
+workspace = true

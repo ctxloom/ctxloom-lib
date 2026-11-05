@@ -1,0 +1,15 @@
+[package]
+name = "sqlite-store-opener"
+version = "0.1.0"
+description = "Places and opens a project's SQLite event store under a caller-chosen file name."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+angzarr-embedded = { workspace = true, features = ["sqlite"] }
+file-system.workspace = true
+
+[lints]
+workspace = true
