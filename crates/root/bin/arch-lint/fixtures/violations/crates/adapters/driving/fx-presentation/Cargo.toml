@@ -1,0 +1,8 @@
+[package]
+name = "fx-presentation"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+fx-app = { path = "../../../../crates/core/application/fx-app" }

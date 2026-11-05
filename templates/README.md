@@ -8,6 +8,8 @@ these files; the copies are independent. Nothing here is linked.
 | `clippy-disallowed.toml` | the `disallowed-methods` array into `clippy.toml` | the canonical OS and filesystem rule, each group commented with why |
 | `os-gates.just` | `gates/os-gates.just`, then `import` it | `lint-os`, `lint-clippy-sync`, `check-windows` |
 | `ltk-rules.yaml` | `.ltk/config.yaml` | ltk rules sending raw cargo, nextest, rustc, lefthook, gitleaks and mutation-testing runs to the just recipes, and blocking every way to skip the hooks (`--no-verify`, `-n`, `core.hooksPath`, `env LEFTHOOK=`/`SKIP=`); tested by `../scripts/ltk-rules.selftest.sh` |
+| `arch-gates.just` | `gates/arch-gates.just`, then `import` it | `lint-arch`: the architecture lint (see below) |
+| `arch-rules.toml` | the repository's top level | the rules table to start from: which role may depend on which |
 | `ci.yml` | `.github/workflows/ci.yml` | Linux gates plus a native Windows build and test |
 | `../scripts/os-cfg-check.sh` | `scripts/` | no OS-naming cfg, `cfg!(`, `std::os::`, `split_paths` or target dependency under `crates/` |
 | `../scripts/os-cfg-allow.txt` | `scripts/` | the seam: one `<file> \| <text on the line> \| <why>` per exception (empty by default; a stale entry fails) |
@@ -32,6 +34,29 @@ The gates' failure output is capped for an agent's context: a pass is one
 `ok` line, a failure its `FAIL` line and at most 40 lines of extract (failing
 tests only, the first 20 diagnostics, 15 survivors, each with a `+K more`
 tail); `scripts/output-budget.selftest.sh` checks that on a fixture workspace.
+
+## The architecture lint
+
+`arch-lint` (`crates/root/bin/arch-lint`) reads a workspace with
+`cargo metadata --no-deps --offline` and holds every normal and build edge
+between workspace members to a table. A crate's directory,
+`crates/<ring>/<role>/<crate>`, is its role (`<ring>/<role>`); the table
+(`arch-rules.toml`) says, per role, which roles (or globs of them, or
+`@class` of crate-name patterns) it may depend on, so the rules are data and
+a repository supplies its own. A crate off the layout, a role with no rule and
+an exception that matches no finding each fail too. Dev-dependency edges are
+checked for the roles named in `dev_checked` only, and a finding there is a
+warning (a line after the `ok`; `--deny-warnings` fails on it). Exceptions are
+`[[exception]]` entries with a mandatory reason. Self-tested by the crate's
+tests over fixture workspaces (`crates/root/bin/arch-lint/fixtures`: a clean
+one, one with a warning, one with a finding of every kind) and
+`../scripts/arch-gates.selftest.sh` (the recipe on them); no network.
+
+Adopting: copy `arch-gates.just` and `arch-rules.toml`, define `arch_lint` in
+the justfile, and install the binary from a pinned commit of this repository
+(`cargo install --git <this repository's URL> --rev <sha>
+arch-lint --locked --root <dir>`), the same sha the consumer pins its other
+crates of this repository at.
 
 ## Adopting
 

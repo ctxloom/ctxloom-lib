@@ -1,0 +1,12 @@
+[package]
+name = "fx-driven-b"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+fx-app = { path = "../../../../crates/core/application/fx-app" }
+
+[dev-dependencies]
+fx-driving-a = { path = "../../../../crates/adapters/driving/fx-driving-a" }
+fx-readmodel = { path = "../../../../crates/core/read-model/fx-readmodel" }

@@ -1,0 +1,12 @@
+[package]
+name = "fx-readmodel"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+fx-domain = { path = "../../../../crates/core/domain/fx-domain" }
+fx-app = { path = "../../../../crates/core/application/fx-app" }
+
+[dev-dependencies]
+fx-driven-a = { path = "../../../../crates/adapters/driven/fx-driven-a" }

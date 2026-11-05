@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/core/application/fx-app",
+  "crates/root/bin/fx-bin",
+  "crates/core/domain/fx-domain",
+  "crates/adapters/driven/fx-driven-a",
+  "crates/adapters/driven/fx-driven-b",
+  "crates/adapters/driving/fx-driving-a",
+  "crates/adapters/driving/fx-driving-b",
+  "crates/oddly/fx-misplaced",
+  "crates/core/mystery/fx-mystery",
+  "crates/core/ports/fx-ports",
+  "crates/adapters/driving/fx-presentation",
+  "crates/core/read-model/fx-readmodel",
+  "crates/root/bin/fx-tool",
+  "crates/core/wire/fx-wire",
+]

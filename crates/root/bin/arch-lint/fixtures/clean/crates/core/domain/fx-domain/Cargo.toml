@@ -1,0 +1,8 @@
+[package]
+name = "fx-domain"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+fx-wire = { path = "../../../../crates/core/wire/fx-wire" }

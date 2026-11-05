@@ -1,0 +1,8 @@
+# A package outside every fixture workspace, for a path dependency on a non-member.
+[workspace]
+
+[package]
+name = "fx-elsewhere"
+version = "0.0.0"
+edition = "2021"
+publish = false

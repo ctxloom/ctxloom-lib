@@ -11,11 +11,14 @@ TOP := `git rev-parse --show-toplevel`
 
 import 'gates/gates.just'
 import 'templates/os-gates.just'
+import 'templates/arch-gates.just'
 
 # What templates/os-gates.just takes from this justfile (sqlite-store-opener is
 # left out of check-windows: its SQLite build needs a mingw C compiler).
 windows_packages := "-p project-dir -p run-within -p process-env -p config-layers"
 clippy_template := TOP / "templates/clippy-disallowed.toml"
+# What templates/arch-gates.just takes from this justfile.
+arch_lint := "cargo run -q -p arch-lint --"
 
 # The staged tree is a sibling of the checkout, not under target/: cargo
 # reads .cargo/config.toml from every parent directory, so under the checkout
@@ -33,7 +36,7 @@ features_prepare := ""
 # code. This repository has no domain, so its hand-written tiers are the
 # core (pure computation), the adapters and the root's helper libraries, all
 # at 90.
-mutation_thresholds := "crates/core=90 crates/adapters=90 crates/root/lib=90"
+mutation_thresholds := "crates/core=90 crates/adapters=90 crates/root/lib=90 crates/root/bin=90"
 
 # Staged paths outside any crate that can change what every crate builds or
 # tests (bash globs, `*` crossing `/`): one of these staged tests the whole
@@ -55,11 +58,12 @@ build:
 # (templates/clippy-disallowed.toml) is the one this repository's own
 # clippy.toml applies to itself.
 [no-exit-message]
-lint: lint-vocab lint-os selftest-gate-kit
+lint: lint-vocab lint-os selftest-gate-kit lint-arch
     #!/usr/bin/env bash
     set -euo pipefail
     {{TOP}}/scripts/clippy-sync-check.sh --exact {{TOP}}/clippy.toml {{TOP}}/templates/clippy-disallowed.toml
     {{TOP}}/scripts/output-budget.selftest.sh
+    {{TOP}}/scripts/arch-gates.selftest.sh
     # Clippy reads only the nearest clippy.toml, so the core's repeats the
     # root's nesting threshold and every entry of the OS and filesystem rule.
     {{TOP}}/scripts/clippy-sync-check.sh {{TOP}}/crates/core/clippy.toml {{TOP}}/templates/clippy-disallowed.toml

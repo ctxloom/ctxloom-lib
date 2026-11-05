@@ -1,0 +1,12 @@
+[package]
+name = "fx-driving-a"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+fx-app = { path = "../../../../crates/core/application/fx-app" }
+fx-presentation = { path = "../../../../crates/adapters/driving/fx-presentation" }
+
+[dev-dependencies]
+fx-app = { path = "../../../../crates/core/application/fx-app" }

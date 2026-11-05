@@ -35,10 +35,16 @@ process-env = { path = "crates/root/lib/process-env" }
 project-dir = { path = "crates/adapters/driven/project-dir" }
 run-within = { path = "crates/adapters/driven/run-within" }
 duration-text = { path = "crates/core/domain/duration-text" }
+arch-lint = { path = "crates/root/bin/arch-lint" }
 
 # The command-line parser and the serializer the CLI shims read and write with.
 clap = "4.5"
 serde = { version = "1", features = ["derive"] }
+
+# The dependency graph as cargo reports it (arch-lint), and the rules file it
+# reads.
+cargo_metadata = "0.23"
+toml = { version = "1", default-features = false, features = ["std", "parse", "serde"] }
 
 # `#[mutants::skip]`, for a mutant judged equivalent.
 mutants = "0.0.4"

@@ -52,6 +52,9 @@ adapters, root helpers and a little pure core, so far:
 - `adapters/driven`: port implementations over the filesystem, the store.
 - `adapters/driving`: the CLI edge's shims: translation only.
 - `root/lib`: helpers for a binary's composition root.
+- `root/bin`: binaries: `arch-lint`, the architecture lint (`templates/README.md`),
+  which holds this layout to `arch-rules.toml` (`just lint-arch`, part of `just
+  lint`).
 
 - `core/domain`: pure computation (no I/O, clock or environment; "now"
   arrives as an argument or a factory): `duration-text`, the grammar of a
@@ -143,7 +146,7 @@ never `--no-verify`, and never weaken a gate to get through.
 No git hook runs mutation testing. Before a batch of work reaches `main`,
 `just mutants-staged` runs over the whole batch's diff (staged against the
 batch's base) and passes: every hand-written tier (`crates/core`, `crates/adapters`,
-`crates/root/lib`) at 90% or more (the justfile's `mutation_thresholds`).
+`crates/root/lib`, `crates/root/bin`) at 90% or more (the justfile's `mutation_thresholds`).
 Each mutant runs only its own crate's tests (`.cargo/mutants.toml`), so a
 crate kills its own mutants. A mutant judged equivalent or untestable gets
 `#[cfg_attr(test, mutants::skip)]` on its function, with `mutants` a

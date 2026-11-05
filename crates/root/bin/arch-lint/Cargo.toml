@@ -1,0 +1,23 @@
+[package]
+name = "arch-lint"
+version = "0.1.0"
+description = "The architecture lint: the workspace's dependency edges, held to a table of which role may depend on which."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+cargo_metadata.workspace = true
+clap = { workspace = true, features = ["derive"] }
+file-system.workspace = true
+os.workspace = true
+process-env.workspace = true
+serde.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+mutants.workspace = true
+
+[lints]
+workspace = true

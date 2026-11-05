@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/core/application/fx-app",
+  "crates/adapters/driven/fx-store",
+  "crates/core/wire/fx-wire",
+]

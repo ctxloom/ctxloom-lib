@@ -1,0 +1,11 @@
+[package]
+name = "fx-app"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+fx-domain = { path = "../../../../crates/core/domain/fx-domain" }
+fx-readmodel = { path = "../../../../crates/core/read-model/fx-readmodel" }
+fx-ports = { path = "../../../../crates/core/ports/fx-ports" }
+fx-wire = { path = "../../../../crates/core/wire/fx-wire" }

@@ -1,0 +1,22 @@
+# ctxloom-lib's own architecture rules (the arch-lint gate, `just lint-arch`).
+# Its crates are independent of one another so far; the table says what they
+# may come to depend on.
+layout = "crates"
+
+[roles."core/domain"]
+allow = ["core/*"]
+rule = "the core depends on the core only"
+
+[roles."adapters/driven"]
+allow = ["core/*"]
+rule = "a driven adapter depends on no other adapter"
+
+[roles."adapters/driving"]
+allow = ["core/*"]
+rule = "a driving adapter depends on no other adapter"
+
+[roles."root/lib"]
+allow = ["core/*"]
+
+[roles."root/bin"]
+allow = ["*"]

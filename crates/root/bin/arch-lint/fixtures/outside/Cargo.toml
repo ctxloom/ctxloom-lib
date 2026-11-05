@@ -1,0 +1,6 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/core/domain/fx-domain",
+  "crates/core/wire/fx-wire",
+]
