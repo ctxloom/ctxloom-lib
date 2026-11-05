@@ -1,5 +1,5 @@
 # The gates, on every push and pull request: build, fmt-check, lint
-# (including the vocabulary rule), lint-deps and test. Mutation testing is a
+# (including the vocabulary rule), lint-os, lint-deps and test. Mutation testing is a
 # by-hand close-out step (CLAUDE.md), in no workflow.
 #
 # A plain checkout: every dependency outside this repository is a git
@@ -41,6 +41,7 @@ jobs:
       - run: just build
       - run: just fmt-check
       - run: just lint
+      - run: just lint-os
       - run: just lint-deps
       - run: just test
       - name: The gates' logs

@@ -2,13 +2,20 @@
 # test-staged, mutants-staged, lint-deps, secrets-scan-staged and the `_run`
 # machinery and extractors) are gates/gates.just, imported below; this file
 # gives them ctxloom-lib's parameters and keeps its own recipes (`build`,
-# `lint`, `lint-vocab`, `test-pkg`).
+# `lint`, `lint-vocab`, `test-pkg`); the OS gates (`lint-os`, `lint-clippy-sync`,
+# `check-windows`) are templates/os-gates.just, which consumers copy.
 # cargo-deny's duplicate-version warnings stay in target/logs/lint-deps.log,
 # not silenced in deny.toml.
 
 TOP := `git rev-parse --show-toplevel`
 
 import 'gates/gates.just'
+import 'templates/os-gates.just'
+
+# What templates/os-gates.just takes from this justfile (sqlite-store-opener is
+# left out of check-windows: its SQLite build needs a mingw C compiler).
+windows_packages := "-p project-dir -p process-env -p config-layers"
+clippy_template := TOP / "templates/clippy-disallowed.toml"
 
 # The staged tree is a sibling of the checkout, not under target/: cargo
 # reads .cargo/config.toml from every parent directory, so under the checkout
@@ -47,14 +54,10 @@ build:
 # (templates/clippy-disallowed.toml) is the one this repository's own
 # clippy.toml applies to itself.
 [no-exit-message]
-lint: lint-vocab
+lint: lint-vocab lint-os selftest-gate-kit
     #!/usr/bin/env bash
     set -euo pipefail
-    paths() { grep -o 'path = "[^"]*"' "$1" | sort -u; }
-    if ! diff <(paths {{TOP}}/clippy.toml) <(paths {{TOP}}/templates/clippy-disallowed.toml) >/dev/null; then
-        echo "FAIL lint: clippy.toml and templates/clippy-disallowed.toml disagree on the disallowed methods" >&2
-        exit 1
-    fi
+    {{TOP}}/scripts/clippy-sync-check.sh --exact {{TOP}}/clippy.toml {{TOP}}/templates/clippy-disallowed.toml
     terse=(-q --message-format=short)
     [ "${VERBOSE:-}" = 1 ] && terse=()
     exec just --justfile {{TOP}}/justfile _run lint workspace cargo \
