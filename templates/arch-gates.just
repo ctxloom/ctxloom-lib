@@ -12,7 +12,9 @@
 #               (`cargo install --git <this repository> --rev <sha> arch-lint
 #               --locked --root <dir>`) in a consumer;
 #
-# and has arch-rules.toml at its top level (templates/arch-rules.toml is the
+# and a recipe `_arch-lint-ready`, which makes `arch_lint` runnable (a no-op
+# where it is `cargo run`; in a consumer, the install of the pinned binary,
+# if it is not there yet); and has arch-rules.toml at its top level (templates/arch-rules.toml is the
 # table to start from). Make `lint` depend on `lint-arch`. The gates it runs
 # through are gates/gates.just's `_run`.
 
@@ -22,7 +24,7 @@
 # one line per warning, which are dev-dependency findings); a failure is the
 # count and the findings, capped by `_run`.
 [no-exit-message]
-lint-arch:
+lint-arch: _arch-lint-ready
     #!/usr/bin/env bash
     set -euo pipefail
     just --justfile {{TOP}}/justfile _run lint-arch workspace arch-lint \

@@ -52,8 +52,8 @@ tests over fixture workspaces (`crates/root/bin/arch-lint/fixtures`: a clean
 one, one with a warning, one with a finding of every kind) and
 `../scripts/arch-gates.selftest.sh` (the recipe on them); no network.
 
-Adopting: copy `arch-gates.just` and `arch-rules.toml`, define `arch_lint` in
-the justfile, and install the binary from a pinned commit of this repository
+Adopting: copy `arch-gates.just` and `arch-rules.toml`, define `arch_lint` and `_arch-lint-ready`
+in the justfile, and install the binary from a pinned commit of this repository
 (`cargo install --git <this repository's URL> --rev <sha>
 arch-lint --locked --root <dir>`), the same sha the consumer pins its other
 crates of this repository at.

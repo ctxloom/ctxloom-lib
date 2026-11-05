@@ -20,6 +20,10 @@ clippy_template := TOP / "templates/clippy-disallowed.toml"
 # What templates/arch-gates.just takes from this justfile.
 arch_lint := "cargo run -q -p arch-lint --"
 
+# `cargo run` builds it on demand.
+_arch-lint-ready:
+    @true
+
 # The staged tree is a sibling of the checkout, not under target/: cargo
 # reads .cargo/config.toml from every parent directory, so under the checkout
 # it would pick up a local-deps override (.cargo/local-deps.toml) and gate the

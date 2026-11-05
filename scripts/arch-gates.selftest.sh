@@ -32,6 +32,8 @@ TOP := \`git rev-parse --show-toplevel\`
 import 'gates/gates.just'
 import 'gates/arch-gates.just'
 arch_lint := "$ARCH_LINT"
+_arch-lint-ready:
+    @true
 staged_tree := "../.{name}.staged"
 feature_rules := ""
 features_prepare := ""
