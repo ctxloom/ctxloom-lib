@@ -1794,8 +1794,12 @@ dependencies = [
 name = "sqlite-store-opener"
 version = "0.1.0"
 dependencies = [
+ "angzarr-diagnostic",
  "angzarr-embedded",
  "file-system",
+ "mutants",
+ "os",
+ "tokio",
 ]
 
 [[package]]
