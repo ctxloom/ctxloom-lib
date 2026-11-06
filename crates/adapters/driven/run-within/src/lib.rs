@@ -32,7 +32,7 @@
 //! killed: the descendant may be meant to stay.
 //!
 //! The `test-support` feature adds only test helpers
-//! ([`install_script`], `diagnostic_samples`); it changes nothing a
+//! ([`install_script`], [`process_gone`], `diagnostic_samples`); it changes nothing a
 //! production build does. In particular a spawn that fails with ETXTBSY
 //! ("text file busy") fails: the cause is a test fixture exec'ing a script
 //! it has just written (see [`install_script`]), and the fixture is where it
@@ -40,6 +40,8 @@
 
 mod capture;
 mod error;
+#[cfg(any(test, feature = "test-support"))]
+mod procfs;
 #[cfg(any(test, feature = "test-support"))]
 mod script;
 
@@ -55,6 +57,8 @@ use os::process::{spawn_tree, Tree};
 #[cfg(any(test, feature = "test-support"))]
 pub use error::diagnostic_samples;
 pub use error::{RunError, EN_US};
+#[cfg(any(test, feature = "test-support"))]
+pub use procfs::process_gone;
 #[cfg(any(test, feature = "test-support"))]
 pub use script::install_script;
 
