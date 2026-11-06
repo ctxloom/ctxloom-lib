@@ -8,11 +8,12 @@
 # Fail on an executable octal mode (any of the owner, group or other execute
 # bits: 0o755, 0o700, 0o111...) written in a test: a `*.test.rs` file or a
 # `.rs` file under a `tests/` directory of crates/. Not flagged: a mask being
-# compared (`mode & 0o111`), a literal in quotes, and a statement that makes
-# a directory (`create_dir_all`, `make_temp_dir`, `Mode::DIR`). A statement is
+# compared (`mode & 0o111`), a literal in quotes, an assertion (it reads a
+# mode, it does not give one), and a statement that makes a directory
+# (`create_dir_all`, `make_temp_dir`, `Mode::DIR`). A statement is
 # the lines up to the next `;`, `{` or `}`. A mode that is the point of a test
-# (the execute bit of a file git commits, a mode asserted of what production
-# code wrote) is an exception in scripts/exec-mode-allow.txt (one per line:
+# (the execute bit of a file git commits or a listing reports, a mode that
+# is data) is an exception in scripts/exec-mode-allow.txt (one per line:
 # `<file> | <text on the line> | <why>`), so each carries its reason and a new
 # one is seen in review; an entry that no longer matches anything fails too.
 #
@@ -45,7 +46,7 @@ scan() {
     function flush(   i, joined) {
       joined = ""
       for (i = 1; i <= n; i++) joined = joined text[i] "\n"
-      if (joined !~ /create_dir_all|make_temp_dir|Mode::DIR|PRIVATE_DIR/) {
+      if (joined !~ /create_dir_all|make_temp_dir|Mode::DIR|PRIVATE_DIR|assert/) {
         for (i = 1; i <= n; i++) {
           if (text[i] ~ /(^|[^"0-9A-Za-z_])0o[0-7_]*[1357][0-7_]?[0-7_]?([^0-7_]|$)/ && text[i] !~ /& *0o/)
             print FILENAME ":" num[i] ":" text[i]

@@ -54,6 +54,18 @@ expect 1 "$(fixture dir-then-file 'fn f() {
     fs.create_dir_all(d, Mode::DIR).unwrap();
     fs.write_atomic(p, b, Perms::Exact(Mode::from_bits(0o755))).unwrap();
 }')" "a file written after a directory made"
+expect 0 "$(fixture assertion 'fn f() { assert_eq!(mode_of(p), 0o755); }')" "an assertion of a mode"
+expect 0 "$(fixture assertion-multiline 'fn f() {
+    assert_eq!(
+        mode_of(p),
+        0o700,
+        "message"
+    );
+}')" "an assertion of a mode over several lines"
+expect 1 "$(fixture after-assertion 'fn f() {
+    assert!(ok);
+    set_mode(p, 0o755);
+}')" "a mode given after an assertion"
 expect 0 "$(fixture quoted 'fn f() { let x = ["0o7", "0o755"]; }')" "a literal in quotes"
 expect 0 "$(fixture production 'fn f() { set_mode(p, 0o755); }' '' lib.rs)" "non-test code"
 expect 0 "$(fixture allowed 'fn f() { set_mode(p, 0o755); }' 'crates/a/b/x/src/lib.test.rs | set_mode(p, 0o755) | the execute bit is the point')" allowed
