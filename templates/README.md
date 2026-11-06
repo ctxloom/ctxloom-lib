@@ -7,6 +7,8 @@ these files; the copies are independent. Nothing here is linked.
 |---|---|---|
 | `clippy-disallowed.toml` | the `disallowed-methods` array into `clippy.toml` | the canonical OS and filesystem rule, each group commented with why |
 | `os-gates.just` | `gates/os-gates.just`, then `import` it | `lint-os`, `lint-clippy-sync`, `check-windows` |
+| `fixture-gates.just` | `gates/fixture-gates.just`, then `import` it | `lint-fixtures`: no test gives a file an executable mode to run it (a fake program is `fixture_program::install_program`) |
+| `../scripts/exec-mode-check.sh` | `scripts/` | the check behind `lint-fixtures`: an executable octal mode written in a `*.test.rs` or `tests/` file fails, with the allowlist `../scripts/exec-mode-allow.txt` (`<file> \| <text on the line> \| <why>`; empty by default; a stale entry fails) |
 | `ltk-rules.yaml` | `.ltk/config.yaml` | ltk rules sending raw cargo, nextest, rustc, lefthook, gitleaks and mutation-testing runs to the just recipes, and blocking every way to skip the hooks (`--no-verify`, `-n`, `core.hooksPath`, `env LEFTHOOK=`/`SKIP=`); tested by `../scripts/ltk-rules.selftest.sh` |
 | `arch-gates.just` | `gates/arch-gates.just`, then `import` it | `lint-arch`: the architecture lint (see below) |
 | `arch-rules.toml` | the repository's top level | the rules table to start from: which role may depend on which |

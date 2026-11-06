@@ -54,3 +54,4 @@ selftest-gate-kit:
     @{{TOP}}/scripts/os-cfg-check.selftest.sh
     @{{TOP}}/scripts/clippy-sync-check.selftest.sh
     @{{TOP}}/scripts/clippy-disallowed.selftest.sh
+    @{{TOP}}/scripts/exec-mode-check.selftest.sh

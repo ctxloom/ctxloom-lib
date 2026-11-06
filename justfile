@@ -11,11 +11,12 @@ TOP := `git rev-parse --show-toplevel`
 
 import 'gates/gates.just'
 import 'templates/os-gates.just'
+import 'templates/fixture-gates.just'
 import 'templates/arch-gates.just'
 
 # What templates/os-gates.just takes from this justfile (sqlite-store-opener is
 # left out of check-windows: its SQLite build needs a mingw C compiler).
-windows_packages := "-p project-dir -p run-within -p process-env -p config-layers"
+windows_packages := "-p project-dir -p run-within -p process-env -p config-layers -p fixture-program"
 clippy_template := TOP / "templates/clippy-disallowed.toml"
 # What templates/arch-gates.just takes from this justfile.
 arch_lint := "cargo run -q -p arch-lint --"
@@ -62,7 +63,7 @@ build:
 # (templates/clippy-disallowed.toml) is the one this repository's own
 # clippy.toml applies to itself.
 [no-exit-message]
-lint: lint-vocab lint-os selftest-gate-kit lint-arch
+lint: lint-vocab lint-os lint-fixtures selftest-gate-kit lint-arch
     #!/usr/bin/env bash
     set -euo pipefail
     {{TOP}}/scripts/clippy-sync-check.sh --exact {{TOP}}/clippy.toml {{TOP}}/templates/clippy-disallowed.toml

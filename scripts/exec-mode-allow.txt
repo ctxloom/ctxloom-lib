@@ -1,0 +1,7 @@
+# The allowed exceptions to `just lint-fixtures` (scripts/exec-mode-check.sh):
+# a test line that gives a file an executable mode on purpose. One per line:
+#   <file> | <text on the line> | <why>
+# A fake program to run is fixture_program::install_program, never one of these.
+crates/adapters/driven/fixture-program/src/lib.test.rs | fs.set_permissions(&plain, Mode::from_bits(0o700)) | gives a stand-in shim its execute bit to show it is then accepted; never run
+crates/adapters/driven/fixture-program/src/lib.test.rs | Perms::Exact(Mode::from_bits(0o755)) | the control: a written executable held by a child fails with ETXTBSY, which shows the next test forces the race
+crates/adapters/driven/run-within/src/lib.test.rs | file_system::Open::Create(Mode::from_bits(0o755)) | the forced-ETXTBSY test of run_within: the script is written executable on purpose, to be refused

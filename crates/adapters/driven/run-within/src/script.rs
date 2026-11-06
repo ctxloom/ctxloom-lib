@@ -17,6 +17,9 @@ use os::Mode;
 /// until that child execs, and until then an exec of this file fails with
 /// "text file busy" (ETXTBSY) even though this file is closed. An interpreter
 /// only reads the script, which a writer does not prevent.
+///
+/// A test that needs a program on a path to run by itself (an editor, a
+/// `git`) wants `fixture-program`'s `install_program` instead.
 pub fn install_script(fs: &dyn Fs, dir: &Path, name: &str, body: &str) -> io::Result<PathBuf> {
     let path = dir.join(name);
     fs.write_atomic(&path, body.as_bytes(), Perms::Exact(Mode::from_bits(0o755)))?;

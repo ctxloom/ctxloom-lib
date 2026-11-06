@@ -77,6 +77,18 @@ checks its own with `just lint-clippy-sync`. `just lint-os` (`scripts/os-cfg-che
 keeps OS-naming cfgs out of `crates/`; the gate-kit (`templates/README.md`) says
 what consumers copy. Their self-tests are `scripts/*.selftest.sh`.
 
+## A test's fake program is `fixture-program`'s, never a written executable
+
+A test that needs a program on a path (an editor, a `git`, a runtime) calls
+`fixture_program::install_program(fs, path, body)` and runs what it returns.
+Writing a script with an executable mode and exec'ing it is racy in a
+multithreaded test process (a thread's fork holds a copy of the writer: "text
+file busy", ETXTBSY), and a retry or a sleep only hides that. The program is a
+link to a committed shim that `sh`-reads the script beside it, so no file the
+test wrote is ever exec'd. `just lint-fixtures` (`scripts/exec-mode-check.sh`,
+part of `just lint`) fails a test line that gives a file an executable mode,
+unless it is listed with its reason in `scripts/exec-mode-allow.txt`.
+
 ## Errors are localizable: a code, args, and an en-US message
 
 Every error implements `angzarr_diagnostic::Diagnostic` with an English
