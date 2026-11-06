@@ -31,10 +31,12 @@
 //! A program that exited normally and left a descendant running is not
 //! killed: the descendant may be meant to stay.
 //!
-//! With the `test-support` feature (and in this crate's own tests), a spawn
-//! that fails with ETXTBSY is retried until it does not, and
-//! [`install_script`] writes a script to run. The retry is not in a
-//! production build.
+//! The `test-support` feature adds only test helpers
+//! ([`install_script`], `diagnostic_samples`); it changes nothing a
+//! production build does. In particular a spawn that fails with ETXTBSY
+//! ("text file busy") fails: the cause is a test fixture exec'ing a script
+//! it has just written (see [`install_script`]), and the fixture is where it
+//! is fixed.
 
 mod capture;
 mod error;
@@ -213,7 +215,7 @@ pub struct Outcome {
 /// deadline, and its output. A program that exits non-zero is an outcome,
 /// not an error.
 pub fn run_within(spec: &Spec, within: &Within) -> Result<Outcome, RunError> {
-    let mut tree = spawn(spec).map_err(|e| RunError::spawn(spec.name(), e))?;
+    let mut tree = spawn_tree(spec.command()).map_err(|e| RunError::spawn(spec.name(), e))?;
     let (done_tx, done_rx) = mpsc::channel();
     let stdout = capture::start(tree.take_stdout(), within.max_bytes, done_tx.clone());
     let stderr = capture::start(tree.take_stderr(), within.max_bytes, done_tx);
@@ -325,35 +327,6 @@ fn drain(done: &Receiver<()>, ended: &mut Ended, grace: Duration) -> bool {
         ended.0 += 1;
     }
     true
-}
-
-#[cfg(not(any(test, feature = "test-support")))]
-fn spawn(spec: &Spec) -> std::io::Result<Tree> {
-    spawn_tree(spec.command())
-}
-
-/// Test support: ETXTBSY is waited out, and only ETXTBSY.
-#[cfg(any(test, feature = "test-support"))]
-fn spawn(spec: &Spec) -> std::io::Result<Tree> {
-    retrying_busy(5000, || spawn_tree(spec.command()))
-}
-
-/// `attempt`, again while it fails with "text file busy", up to `tries`
-/// times, then once more whatever the outcome; any other result at once.
-#[cfg(any(test, feature = "test-support"))]
-fn retrying_busy<T>(
-    tries: u32,
-    mut attempt: impl FnMut() -> std::io::Result<T>,
-) -> std::io::Result<T> {
-    for _ in 0..tries {
-        match attempt() {
-            Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy => {
-                std::thread::sleep(Duration::from_millis(1));
-            }
-            other => return other,
-        }
-    }
-    attempt()
 }
 
 #[cfg(test)]

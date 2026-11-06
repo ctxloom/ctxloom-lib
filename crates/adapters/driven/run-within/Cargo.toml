@@ -27,7 +27,7 @@ angzarr-diagnostic = { workspace = true, features = ["build"] }
 workspace = true
 
 [features]
-# `diagnostic_samples` for other crates' catalog tests, `install_script` for
-# tests that need a program to run, and a spawn that waits out ETXTBSY (see
-# the crate's documentation).
+# Additive helpers only: `diagnostic_samples` for other crates' catalog tests
+# and `install_script` for tests that need a script to run. It changes no
+# behaviour of `run_within`.
 test-support = ["dep:file-system"]

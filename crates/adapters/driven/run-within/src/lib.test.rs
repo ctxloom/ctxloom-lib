@@ -39,7 +39,8 @@ impl Machine {
     fn spec(&self, body: &str) -> Spec {
         let path =
             install_script(&self.fs, &self.dir, "prog", &format!("#!/bin/sh\n{body}\n")).unwrap();
-        Spec::new(path)
+        // Run by the interpreter, never exec'd: see `install_script`.
+        Spec::new("/bin/sh").args([path])
     }
 
     fn real_dir(&self) -> PathBuf {
@@ -421,48 +422,47 @@ fn a_program_still_running_at_the_deadline_is_killed_without_a_status() {
 
 // --- ETXTBSY
 
+/// The race behind "text file busy", forced rather than waited for: a child
+/// holds a copy of the descriptor a script was written through (here by being
+/// given it as stdout, where a thread's fork holds it between fork and exec),
+/// and the writer is long closed.
 #[test]
-fn only_a_busy_text_file_is_tried_again() {
-    let busy = || io::Error::from(io::ErrorKind::ExecutableFileBusy);
-    let mut calls = 0;
-    let got = retrying_busy(10, || {
-        calls += 1;
-        if calls < 4 {
-            Err(busy())
-        } else {
-            Ok(calls)
-        }
-    });
-    assert_eq!(got.unwrap(), 4);
+fn a_script_a_child_still_holds_for_writing_cannot_be_exec_d_but_can_be_interpreted() {
+    if !runs_scripts() {
+        return;
+    }
+    let machine = Machine::new();
+    let path = install_script(&machine.fs, &machine.dir, "racy", "#!/bin/sh\necho ran\n").unwrap();
+    let writer = machine
+        .fs
+        .open(
+            &machine.dir.join("racy"),
+            file_system::Open::Create(Mode::from_bits(0o755)),
+        )
+        .unwrap();
+    let mut holder = std::process::Command::new("/bin/sh")
+        .args(["-c", "read line"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(writer)
+        .spawn()
+        .unwrap();
+    // The parent's writer was moved into the child's stdout and is closed
+    // here; only the child holds the file for writing.
 
-    let mut calls = 0;
-    let got: io::Result<()> = retrying_busy(10, || {
-        calls += 1;
-        Err(io::ErrorKind::NotFound.into())
-    });
-    assert_eq!(got.unwrap_err().kind(), io::ErrorKind::NotFound);
-    assert_eq!(calls, 1, "another error is not retried");
-}
+    let error = run_within(&Spec::new(&path), &Within::new(PROMPT)).unwrap_err();
+    assert_eq!(
+        error.io().kind(),
+        io::ErrorKind::ExecutableFileBusy,
+        "{error}"
+    );
 
-#[test]
-fn a_file_that_stays_busy_is_tried_a_last_time_and_its_error_returned() {
-    let mut calls = 0;
-    let got: io::Result<()> = retrying_busy(3, || {
-        calls += 1;
-        Err(io::ErrorKind::ExecutableFileBusy.into())
-    });
-    assert_eq!(got.unwrap_err().kind(), io::ErrorKind::ExecutableFileBusy);
-    assert_eq!(calls, 4);
-    let mut calls = 0;
-    let got = retrying_busy(3, || {
-        calls += 1;
-        if calls < 4 {
-            Err(io::ErrorKind::ExecutableFileBusy.into())
-        } else {
-            Ok(())
-        }
-    });
-    assert!(got.is_ok(), "the last try counts");
+    let out = run_within(&Spec::new("/bin/sh").args([&path]), &Within::new(PROMPT)).unwrap();
+    assert_eq!(text(&out.stdout), "ran\n");
+
+    drop(holder.stdin.take());
+    holder.wait().unwrap();
+    let out = run_within(&Spec::new(&path), &Within::new(PROMPT)).unwrap();
+    assert_eq!(text(&out.stdout), "ran\n", "free once the holder is gone");
 }
 
 #[test]

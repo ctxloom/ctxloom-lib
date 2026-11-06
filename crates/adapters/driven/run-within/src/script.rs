@@ -8,14 +8,15 @@ use os::Mode;
 
 /// Write `body` (the whole script, its `#!` line included) as the
 /// executable `name` in `dir` of `fs`: written, synced, closed and made
-/// executable, atomically. Returns the path on the host, for a `Command` to
-/// run.
+/// executable, atomically. Returns the path on the host.
 ///
-/// A script that is run at once may still be "text file busy" (ETXTBSY): a
-/// thread of the same process that forked while this file was open for
-/// writing gives the fork's copy of the descriptor up only when that child
-/// executes. [`run_within`](crate::run_within) waits that out when this
-/// feature is on, so a test needs no retry of its own.
+/// Run it as `sh <path>` (the interpreter named in the `#!` line, the path as
+/// its argument), never as the program itself. Exec'ing a file just written
+/// is racy in a multithreaded test process: a thread that forks while this
+/// file is open for writing gives the child a copy of the descriptor, held
+/// until that child execs, and until then an exec of this file fails with
+/// "text file busy" (ETXTBSY) even though this file is closed. An interpreter
+/// only reads the script, which a writer does not prevent.
 pub fn install_script(fs: &dyn Fs, dir: &Path, name: &str, body: &str) -> io::Result<PathBuf> {
     let path = dir.join(name);
     fs.write_atomic(&path, body.as_bytes(), Perms::Exact(Mode::from_bits(0o755)))?;
