@@ -486,3 +486,47 @@ fn draining_waits_for_the_readers_only_up_to_the_grace() {
     let mut none = Ended::default();
     assert!(!drain(&rx, &mut none, Duration::ZERO));
 }
+
+// --- started
+
+#[test]
+fn started_is_called_once_with_the_childs_pid_after_the_spawn() {
+    if !runs_scripts() {
+        return;
+    }
+    let machine = Machine::new();
+    let spec = machine.spec(&format!("echo $$ > {}/pid", machine.real_dir().display()));
+    let mut seen = Vec::new();
+    let out = run_within_started(&spec, &Within::new(LONG), |pid| seen.push(pid)).unwrap();
+    assert_eq!(code(out.status), Some(0));
+    assert_eq!(seen.len(), 1);
+    let written = machine.fs.read_to_string(&machine.dir.join("pid")).unwrap();
+    assert_eq!(written.trim(), seen[0].to_string());
+}
+
+#[test]
+fn started_is_not_called_when_the_spawn_fails() {
+    let mut called = false;
+    let error = run_within_started(&Spec::new("/no/such/program"), &Within::new(LONG), |_| {
+        called = true
+    })
+    .unwrap_err();
+    assert!(matches!(error, RunError::NotFound { .. }), "{error}");
+    assert!(!called);
+}
+
+#[test]
+fn started_sees_a_program_that_is_then_killed_at_its_deadline() {
+    if !runs_scripts() {
+        return;
+    }
+    let mut seen = None;
+    let out = run_within_started(
+        &Machine::new().spec("exec sleep 30"),
+        &Within::new(TINY),
+        |pid| seen = Some(pid),
+    )
+    .unwrap();
+    assert!(out.timed_out);
+    assert!(seen.is_some());
+}

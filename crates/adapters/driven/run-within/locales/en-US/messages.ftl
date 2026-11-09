@@ -5,4 +5,4 @@
 not-found = { $program } was not found, or the directory to run it in was not: { $reason }
 unrunnable = { $program } could not be started: { $reason }
 wait-failed = { $program } could not be waited on, and was killed: { $reason }
-kill-failed = { $program } outlived its deadline and could not be killed: { $reason }
+kill-failed = { $program } outlived its deadline or was to be stopped, and could not be killed: { $reason }

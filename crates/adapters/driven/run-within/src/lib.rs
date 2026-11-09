@@ -28,6 +28,39 @@
 //! signal itself ([`os::Os::stop_signal`]) and ends the tree; this crate
 //! returns only when its program is over.
 //!
+//! # Started
+//!
+//! [`run_within_started`] is [`run_within`] that calls a closure with the
+//! program's pid once the spawn has succeeded (never when it failed), so a
+//! caller can record "started" truthfully.
+//!
+//! # Terminal mode
+//!
+//! [`run_terminal`] runs an interactive program. Its invariants:
+//!
+//! - The program inherits the caller's stdin, stdout and stderr; nothing is
+//!   captured, so [`Within::max_bytes`], [`Within::drain_grace`] and the
+//!   [`Spec`]'s input do not apply (the input is ignored).
+//! - The program is NOT put in a process group of its own: it stays in the
+//!   caller's, so when that is the terminal's foreground group its reads
+//!   from the terminal do not stop it (SIGTTIN), and a Ctrl-C at the
+//!   terminal reaches it and its descendants directly.
+//! - There is no deadline. The wait ends when the program exits, or when
+//!   the caller's [`Stop`] has been requested, which kills the DIRECT child
+//!   (SIGKILL on unix, `TerminateProcess` on Windows) and reports it
+//!   [`stopped`](TerminalOutcome::stopped). The caller turns the platform's
+//!   stop signal ([`os::Os::stop_signal`]) into [`Stop::request`] on its own
+//!   runtime.
+//! - The tree is NOT killed: with no group of its own there is no handle on
+//!   the descendants, and signalling the caller's own group would signal the
+//!   caller. A descendant outlives a stopped program unless the terminal
+//!   delivers it a signal too. A caller that must end the descendants runs
+//!   the program in a mode with a tree ([`run_within`]).
+//!
+//! Tested on Linux only; macOS and Windows use only `std::process`, but are
+//! not exercised. No test attaches a real tty: the inheritance and
+//! group invariants are proved, not the terminal's own job control.
+//!
 //! A program that exited normally and left a descendant running is not
 //! killed: the descendant may be meant to stay.
 //!
@@ -44,6 +77,7 @@ mod error;
 mod procfs;
 #[cfg(any(test, feature = "test-support"))]
 mod script;
+mod terminal;
 
 use std::ffi::{OsStr, OsString};
 use std::io::Write;
@@ -61,6 +95,7 @@ pub use error::{RunError, EN_US};
 pub use procfs::process_gone;
 #[cfg(any(test, feature = "test-support"))]
 pub use script::install_script;
+pub use terminal::{run_terminal, Stop, TerminalOutcome};
 
 /// How often the program is asked whether it has exited, when nothing else
 /// wakes the wait.
@@ -219,7 +254,20 @@ pub struct Outcome {
 /// deadline, and its output. A program that exits non-zero is an outcome,
 /// not an error.
 pub fn run_within(spec: &Spec, within: &Within) -> Result<Outcome, RunError> {
+    run_within_started(spec, within, |_| {})
+}
+
+/// [`run_within`], telling the caller the program's process id once it has
+/// really been started: `started` is called exactly once, with the pid, after
+/// the spawn succeeded and before anything else is done with the program. A
+/// program that cannot be started is the error, and `started` is not called.
+pub fn run_within_started(
+    spec: &Spec,
+    within: &Within,
+    started: impl FnOnce(u32),
+) -> Result<Outcome, RunError> {
     let mut tree = spawn_tree(spec.command()).map_err(|e| RunError::spawn(spec.name(), e))?;
+    started(tree.id());
     let (done_tx, done_rx) = mpsc::channel();
     let stdout = capture::start(tree.take_stdout(), within.max_bytes, done_tx.clone());
     let stderr = capture::start(tree.take_stderr(), within.max_bytes, done_tx);
