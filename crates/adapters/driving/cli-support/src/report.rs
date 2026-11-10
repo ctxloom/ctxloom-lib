@@ -66,9 +66,11 @@ impl Reported {
         error: &dyn Diagnostic,
         refusals: &[Box<dyn Diagnostic>],
     ) -> Reported {
-        let _ = refusals;
         Reported {
-            refusals: Vec::new(),
+            refusals: refusals
+                .iter()
+                .map(|refusal| Reported::of(catalog, &**refusal))
+                .collect(),
             ..Reported::of(catalog, error)
         }
     }
@@ -87,7 +89,12 @@ pub fn say_failure(
 ) -> io::Result<()> {
     match format {
         Format::Json => write_json(err, &Reported::with_refusals(catalog, error, refusals)),
-        Format::Text => say_one(program, catalog, error, err),
+        Format::Text => {
+            say_one(program, catalog, error, err)?;
+            refusals
+                .iter()
+                .try_for_each(|refusal| say_one(program, catalog, &**refusal, err))
+        }
     }
 }
 
