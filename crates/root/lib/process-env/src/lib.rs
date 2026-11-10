@@ -13,8 +13,14 @@
 //! with the rest: [`EnvSnapshot::utf8`] finds none, [`EnvSnapshot::vars_utf8`]
 //! skips the pair. Names are compared as the host's flavor compares them
 //! (case-insensitively on Windows).
+//!
+//! A snapshot's `Debug` names its variables and never renders a value
+//! (ruling 84): an environment holds credentials, and a `{:?}` in a log, a
+//! panic or an error must not carry them. No list of secret names decides
+//! it: every value is withheld. A name that is not UTF-8 renders lossily.
 
 use std::ffi::{OsStr, OsString};
+use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -33,13 +39,31 @@ enum Cwd {
     },
 }
 
-/// The process environment, read once.
-#[derive(Debug)]
+/// The process environment, read once. Its `Debug` renders the variables'
+/// names only, never their values.
 pub struct EnvSnapshot {
     flavor: Flavor,
     cwd: Cwd,
     temp_dir: PathBuf,
     vars: Vec<(OsString, OsString)>,
+}
+
+impl fmt::Debug for EnvSnapshot {
+    /// The flavor, the working directory, the temporary directory and the
+    /// variables' names (lossily when not UTF-8); never a value.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let names: Vec<_> = self
+            .vars
+            .iter()
+            .map(|(name, _)| name.to_string_lossy())
+            .collect();
+        f.debug_struct("EnvSnapshot")
+            .field("flavor", &self.flavor)
+            .field("cwd", &self.cwd)
+            .field("temp_dir", &self.temp_dir)
+            .field("vars", &names)
+            .finish()
+    }
 }
 
 impl EnvSnapshot {
