@@ -433,3 +433,126 @@ fn test_emit_or_passes_a_written_answer_and_turns_a_failed_write_into_the_fault(
     .expect_err("the fault");
     assert_eq!(failure.exit, EXIT_REFUSED);
 }
+
+// ---------------------------------------------------------------- refusals (ruling 73i)
+//
+// A failure may carry several refusals; each is said as a failure alone is:
+// its message and, where the catalog has its `-fix`, the remedy.
+
+fn both_catalog() -> Catalog {
+    Catalog::en_us(&[
+        ("cli-support-test", FTL),
+        ("cli-support-plain", "plain = { $text }\n"),
+    ])
+    .expect("a catalog")
+}
+
+fn refused(refusals: Vec<Box<dyn Diagnostic>>) -> Failure {
+    Failure::new(Note("it broke", "mend it"), EXIT_FATAL).with_refusals(refusals)
+}
+
+fn two_refusals() -> Vec<Box<dyn Diagnostic>> {
+    vec![Box::new(Note("first", "do one")), Box::new(Plain)]
+}
+
+fn said(failure: &Failure, format: Format) -> String {
+    let mut err = Vec::new();
+    failure
+        .say("demo", format, &both_catalog(), &mut err)
+        .expect("written");
+    String::from_utf8(err).expect("utf-8")
+}
+
+const ALONE_JSON: &str = "{\n  \"code\": \"note\",\n  \"args\": {\n    \"text\": \"it broke\",\n    \"remedy\": \"mend it\"\n  },\n  \"message\": \"it broke\",\n  \"fix\": \"mend it\"\n}\n";
+
+#[test]
+fn test_a_new_failure_has_no_refusals() {
+    assert!(Failure::new(Note("x", ""), EXIT_REFUSED)
+        .refusals
+        .is_empty());
+    let boxed = Failure::boxed(Box::new(Plain), EXIT_FAILED);
+    assert_eq!((boxed.cause.code(), boxed.exit), ("plain", EXIT_FAILED));
+    assert!(boxed.refusals.is_empty());
+}
+
+#[test]
+fn test_refusals_keep_the_order_they_are_added_in() {
+    let failure = refused(two_refusals()).with_refusal(Note("last", ""));
+    let codes: Vec<_> = failure.refusals.iter().map(|r| r.code()).collect();
+    assert_eq!(codes, ["note", "plain", "note"]);
+    assert_eq!(
+        failure.refusals[2].to_string(),
+        Note("last", "").to_string()
+    );
+    assert_eq!(failure.exit, EXIT_FATAL, "the exit is the failure's own");
+}
+
+#[test]
+fn test_a_failure_without_refusals_is_its_envelope_and_fix_alone() {
+    let failure = refused(Vec::new());
+    assert_eq!(said(&failure, Format::Json), ALONE_JSON);
+    assert_eq!(
+        said(&failure, Format::Text),
+        "demo: it broke\n  fix: mend it\n"
+    );
+    let mut alone = Vec::new();
+    angzarr_presentation::write_json(
+        &mut alone,
+        &Reported::of(&both_catalog(), &Note("it broke", "mend it")),
+    )
+    .expect("written");
+    assert_eq!(String::from_utf8(alone).expect("utf-8"), ALONE_JSON);
+}
+
+#[test]
+fn test_a_failure_without_a_fix_message_has_no_fix_key_or_line() {
+    let failure = Failure::new(Plain, EXIT_REFUSED);
+    assert_eq!(
+        said(&failure, Format::Json),
+        "{\n  \"code\": \"plain\",\n  \"args\": {\n    \"text\": \"no \\\"remedy\\\" here\"\n  },\n  \"message\": \"no \\\"remedy\\\" here\"\n}\n"
+    );
+    assert_eq!(said(&failure, Format::Text), "demo: no \"remedy\" here\n");
+}
+
+#[test]
+fn test_refusals_under_json_are_a_list_in_order_each_with_its_fix_when_it_has_one() {
+    assert_eq!(
+        said(&refused(two_refusals()), Format::Json),
+        "{\n  \"code\": \"note\",\n  \"args\": {\n    \"text\": \"it broke\",\n    \"remedy\": \"mend it\"\n  },\n  \"message\": \"it broke\",\n  \"fix\": \"mend it\",\n  \"refusals\": [\n    {\n      \"code\": \"note\",\n      \"args\": {\n        \"text\": \"first\",\n        \"remedy\": \"do one\"\n      },\n      \"message\": \"first\",\n      \"fix\": \"do one\"\n    },\n    {\n      \"code\": \"plain\",\n      \"args\": {\n        \"text\": \"no \\\"remedy\\\" here\"\n      },\n      \"message\": \"no \\\"remedy\\\" here\"\n    }\n  ]\n}\n"
+    );
+}
+
+#[test]
+fn test_refusals_under_text_follow_the_failure_each_with_its_fix_line() {
+    assert_eq!(
+        said(&refused(two_refusals()), Format::Text),
+        "demo: it broke\n  fix: mend it\ndemo: first\n  fix: do one\ndemo: no \"remedy\" here\n"
+    );
+}
+
+#[test]
+fn test_say_failure_takes_the_cause_and_refusals_apart_from_a_failure() {
+    let mut err = Vec::new();
+    say_failure(
+        "prog",
+        Format::Text,
+        &both_catalog(),
+        &Plain,
+        &[Box::new(Note("w", "r")) as Box<dyn Diagnostic>],
+        &mut err,
+    )
+    .expect("written");
+    assert_eq!(
+        String::from_utf8(err).expect("utf-8"),
+        "prog: no \"remedy\" here\nprog: w\n  fix: r\n"
+    );
+}
+
+#[test]
+fn test_saying_a_failure_on_a_closed_stream_is_the_write_error() {
+    for format in [Format::Text, Format::Json] {
+        assert!(refused(two_refusals())
+            .say("demo", format, &both_catalog(), &mut Closed)
+            .is_err());
+    }
+}

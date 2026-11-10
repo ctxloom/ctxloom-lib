@@ -15,7 +15,7 @@ mod report;
 pub use args::{emit, emit_or, flag, many, one};
 pub use call::{Call, Failure, EXIT_FAILED, EXIT_FATAL, EXIT_REFUSED};
 pub use notices::{say_notices, say_warning, FixOf};
-pub use report::{report_failure, ReportText};
+pub use report::{report_failure, say_failure, ReportText, Reported};
 
 #[cfg(test)]
 #[path = "lib.test.rs"]

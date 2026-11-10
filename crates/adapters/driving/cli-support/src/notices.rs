@@ -41,6 +41,11 @@ impl Diagnostic for FixOf<'_> {
     }
 }
 
+/// The remedy of `d` in `catalog`, where it has the `<code>-fix` id.
+pub(crate) fn fix_of(catalog: &Catalog, d: &dyn Diagnostic) -> Option<String> {
+    catalog.render(&FixOf(d, format!("{}-fix", d.code()))).ok()
+}
+
 /// Say each notice on `err`: a json line under json, `prog: warning: ...`
 /// and its `  fix: ...` under text.
 pub fn say_notices<N: Diagnostic>(
@@ -52,9 +57,7 @@ pub fn say_notices<N: Diagnostic>(
 ) {
     for notice in notices {
         let message = catalog.message(notice);
-        let remedy = catalog
-            .render(&FixOf(notice, format!("{}-fix", notice.code())))
-            .unwrap_or_default();
+        let remedy = fix_of(catalog, notice).unwrap_or_default();
         let _ = match format {
             Format::Json => write_json_line(
                 err,
