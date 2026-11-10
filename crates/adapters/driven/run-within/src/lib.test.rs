@@ -530,3 +530,27 @@ fn started_sees_a_program_that_is_then_killed_at_its_deadline() {
     assert!(out.timed_out);
     assert!(seen.is_some());
 }
+
+/// Ruling 84: a spec's `Debug` names its variables and gives its input's
+/// length, never a value or the input itself; the rest renders as ever.
+#[test]
+fn a_specs_debug_names_its_variables_and_withholds_values_and_input() {
+    let spec = Spec::new("prog")
+        .args(["--flag"])
+        .envs([("TOKEN", "secret-value")])
+        .current_dir("/work")
+        .stdin("secret-input");
+    for shown in [format!("{spec:?}"), format!("{spec:#?}")] {
+        assert!(!shown.contains("secret-value"), "{shown}");
+        assert!(!shown.contains("secret-input"), "{shown}");
+        // Nor as the derive would render it, a list of its bytes.
+        assert!(!shown.contains("115"), "{shown}");
+        assert!(shown.contains("TOKEN"), "{shown}");
+        assert!(shown.contains("12 bytes"), "{shown}");
+        assert!(shown.contains("prog"), "{shown}");
+        assert!(shown.contains("--flag"), "{shown}");
+        assert!(shown.contains("/work"), "{shown}");
+    }
+    let without = format!("{:?}", Spec::new("prog"));
+    assert!(without.contains("stdin: None"), "{without}");
+}
