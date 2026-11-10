@@ -185,3 +185,31 @@ fn test_from_process_holds_what_the_process_has() {
     assert_eq!(env.utf8(NAME), Some("kept"));
     assert_eq!(EnvSnapshot::from_process().var(NAME), None);
 }
+
+/// Ruling 84: a snapshot's `Debug` names its variables and never renders a
+/// value, a credential's least of all; the other fields render as ever.
+#[test]
+fn test_debug_names_every_variable_and_renders_no_value() {
+    let env = unix(&[("ANTHROPIC_API_KEY", "secret-value"), ("EMPTY", "")])
+        .with_cwd("/work")
+        .with_temp_dir("/scratch");
+    let shown = format!("{env:?}");
+    assert!(!shown.contains("secret-value"), "{shown}");
+    assert!(shown.contains("ANTHROPIC_API_KEY"), "{shown}");
+    assert!(shown.contains("EMPTY"), "{shown}");
+    assert!(shown.contains("Unix"), "{shown}");
+    assert!(shown.contains("/work"), "{shown}");
+    assert!(shown.contains("/scratch"), "{shown}");
+    let pretty = format!("{env:#?}");
+    assert!(!pretty.contains("secret-value"), "{pretty}");
+    assert!(pretty.contains("ANTHROPIC_API_KEY"), "{pretty}");
+}
+
+/// A name that is not UTF-8 is still named (lossily); its value is not shown.
+#[test]
+fn test_debug_names_a_non_utf_8_variable_lossily_without_its_value() {
+    let env = EnvSnapshot::of([(os::not_unicode("KEY_"), OsString::from("secret-value"))]);
+    let shown = format!("{env:?}");
+    assert!(!shown.contains("secret-value"), "{shown}");
+    assert!(shown.contains("KEY_"), "{shown}");
+}
