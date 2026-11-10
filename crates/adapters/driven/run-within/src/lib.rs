@@ -80,6 +80,7 @@ mod script;
 mod terminal;
 
 use std::ffi::{OsStr, OsString};
+use std::fmt;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Stdio};
@@ -102,14 +103,48 @@ pub use terminal::{run_terminal, Stop, TerminalOutcome};
 const POLL: Duration = Duration::from_millis(5);
 
 /// What to run: the program, its arguments, its whole environment, where, and
-/// what it is fed.
-#[derive(Clone, Debug)]
+/// what it is fed. Its `Debug` names the variables and gives the input's
+/// length only, never a variable's value or the input itself (ruling 84): an
+/// environment holds credentials, and a `{:?}` in a log or an error must not
+/// carry them.
+#[derive(Clone)]
 pub struct Spec {
     program: OsString,
     args: Vec<OsString>,
     env: Vec<(OsString, OsString)>,
     cwd: Option<PathBuf>,
     stdin: Option<Vec<u8>>,
+}
+
+impl fmt::Debug for Spec {
+    /// The program, its arguments and directory as they are; the variables'
+    /// names (lossily when not UTF-8); the input as its length.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let names: Vec<_> = self
+            .env
+            .iter()
+            .map(|(name, _)| name.to_string_lossy())
+            .collect();
+        f.debug_struct("Spec")
+            .field("program", &self.program)
+            .field("args", &self.args)
+            .field("env", &names)
+            .field("cwd", &self.cwd)
+            .field(
+                "stdin",
+                &self.stdin.as_ref().map(|bytes| Length(bytes.len())),
+            )
+            .finish()
+    }
+}
+
+/// An input's length, rendered `<N bytes>` in a [`Spec`]'s `Debug`.
+struct Length(usize);
+
+impl fmt::Debug for Length {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<{} bytes>", self.0)
+    }
 }
 
 impl Spec {
