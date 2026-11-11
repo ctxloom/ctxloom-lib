@@ -84,6 +84,7 @@
 
 mod capture;
 mod error;
+mod piped;
 #[cfg(any(test, feature = "test-support"))]
 mod procfs;
 #[cfg(any(test, feature = "test-support"))]
@@ -103,6 +104,7 @@ use os::process::{spawn_tree, Tree};
 #[cfg(any(test, feature = "test-support"))]
 pub use error::diagnostic_samples;
 pub use error::{RunError, EN_US};
+pub use piped::{run_piped, Piped, Pipes};
 #[cfg(any(test, feature = "test-support"))]
 pub use procfs::process_gone;
 #[cfg(any(test, feature = "test-support"))]
