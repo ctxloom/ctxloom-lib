@@ -187,3 +187,25 @@ impl ExitClass for Taken {
 fn test_an_error_says_its_own_class() {
     assert_eq!(Taken.exit(), Exit::REFUSED);
 }
+
+// A child program's own codes are not the convention's: its status is said in
+// the classes, never passed through (its 1 would read as a success).
+#[test]
+fn test_a_child_status_is_said_in_the_classes() {
+    let of = |code, signal| Exit::from_child_status(code, signal).code(true);
+    assert_eq!(of(Some(0), None), 0, "a child that exited 0 is ok");
+    for code in [1, 2, 9, 10, 20, 21, 30, 127, 128, 256, -1] {
+        assert_eq!(of(Some(code), None), 10, "a child's {code} failed");
+    }
+    assert_eq!(of(Some(129), None), 129, "a shell's 128+1 is signal 1");
+    assert_eq!(of(Some(143), None), 143, "a shell's 128+15 is signal 15");
+    assert_eq!(of(Some(255), None), 255, "a shell's 128+127 is signal 127");
+    assert_eq!(of(None, Some(15)), 143, "a child the signal ended");
+    assert_eq!(of(None, Some(1)), 129);
+    assert_eq!(of(None, Some(127)), 255);
+    assert_eq!(of(Some(0), Some(9)), 137, "the signal is what ended it");
+    for signal in [0, 128, -9] {
+        assert_eq!(of(None, Some(signal)), 10, "no such signal: {signal}");
+    }
+    assert_eq!(of(None, None), 10, "a status that says nothing failed");
+}

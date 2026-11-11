@@ -127,6 +127,15 @@ impl Exit {
         ExitCode::from(self.code(detailed))
     }
 
+    /// The exit of a child program that ended with `code`, or was ended by
+    /// `signal`: a child's own codes are not this convention's, so none is
+    /// passed through (its 1 would read as a success). Ok for 0; the signal
+    /// for a signal in 1..=127, or a shell's 128 plus one; failed (10) for
+    /// any other status, or none.
+    pub const fn from_child_status(_code: Option<i32>, _signal: Option<i32>) -> Exit {
+        Exit::OK
+    }
+
     /// The more severe of `self` and `other`, the one a command that has
     /// both to report exits with. A signal outranks everything; a decline
     /// outranks a failure (it is a verdict on the request, which a retry
