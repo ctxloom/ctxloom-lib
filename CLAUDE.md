@@ -58,7 +58,7 @@ adapters, root helpers and a little pure core, so far:
 
 - `core/domain`: pure computation (no I/O, clock or environment; "now"
   arrives as an argument or a factory): `duration-text`, the grammar of a
-  span or a date as text. The core's purity rules (`crates/core/clippy.toml`)
+  span or a date as text; `exit-code`, the exit-code convention as a type. The core's purity rules (`crates/core/clippy.toml`)
   repeat the root's, since clippy reads the nearest `clippy.toml`; `just lint`
   checks the nesting threshold and every OS-rule entry are in it. A further
   core role (`core/ports`, ...) appears only if a crate needs it. A crate takes plain
@@ -102,9 +102,10 @@ for each consuming binary to assemble. Generated code is never committed.
 `docs/exit-codes.md` is the exit-code convention (blocks: 0-9 successes, 1-9
 only under `--detailed-exitcode`; 10-19 failures; 20-29 declines; 128+n
 signals; the higher detailed code is the more severe), written to be copied
-unchanged into any project. `cli-support`'s `Exit` encodes it, and its
-rustdoc renders the document (`cli_support::convention`); a `Failure` carries
-an `Exit`, never a raw code.
+unchanged into any project. The core crate `exit-code`'s `Exit` encodes it
+(pure, so a consumer's core says its errors' classes with it), and its
+rustdoc renders the document (`exit_code::convention`); `cli-support`
+re-exports it, and a `Failure` carries an `Exit`, never a raw code.
 
 ## Pins: by full commit, one of each
 

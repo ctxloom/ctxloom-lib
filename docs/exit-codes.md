@@ -132,15 +132,19 @@ new subcode never changes the class an existing caller sees.
 
 ## The type that encodes it
 
-In the `cli-support` crate the convention is the type `Exit` (and its
-`Class`): constructors for each block that refuse a code outside it
+In the `exit-code` crate (pure: no I/O and no parser, so a program's core
+may name its errors' classes with it, and re-exported by `cli-support`, the
+command-line edge) the convention is the type `Exit` (and its `Class`):
+constructors for each block that refuse a code outside it
 (`Exit::success`, `Exit::failed`, `Exit::declined`, `Exit::signal`), the
 defined codes as constants (`Exit::OK`, `Exit::WOULD_CHANGE`,
 `Exit::FAILED`, `Exit::REFUSED`, `Exit::FATAL_FINDINGS`), `Exit::code`, the
 single function that turns an exit and the `--detailed-exitcode` flag into
 the process's status and holds the collapse rule, `Exit::worst` (and the
 type's ordering), which is the severity order, and `Exit::usage`, which maps
-an argument parser's error to 20 (or to 0 for help and version). A command's
-`Failure` carries its `Exit`; an error type says its own class by
-implementing `ExitClass`. `detailed_exitcode_arg` and `detailed_exitcode`
-declare and read the global flag.
+an argument parser's verdict to 20 for a usage error (or to 0 for help and
+version). An error type says its own class by implementing `ExitClass`. In
+`cli-support`, a command's `Failure` carries its `Exit` (`Failure::of` takes
+it from an `ExitClass` error), `usage_exit` reads a clap error, and
+`detailed_exitcode_arg` and `detailed_exitcode` declare and read the global
+flag.

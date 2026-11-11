@@ -11,6 +11,7 @@ publish.workspace = true
 angzarr-diagnostic.workspace = true
 angzarr-presentation.workspace = true
 clap.workspace = true
+exit-code.workspace = true
 serde.workspace = true
 
 [dev-dependencies]

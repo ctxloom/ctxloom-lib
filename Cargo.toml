@@ -36,6 +36,7 @@ project-dir = { path = "crates/adapters/driven/project-dir" }
 run-within = { path = "crates/adapters/driven/run-within" }
 fixture-program = { path = "crates/adapters/driven/fixture-program" }
 duration-text = { path = "crates/core/domain/duration-text" }
+exit-code = { path = "crates/core/domain/exit-code" }
 arch-lint = { path = "crates/root/bin/arch-lint" }
 
 # The command-line parser and the serializer the CLI shims read and write with.
