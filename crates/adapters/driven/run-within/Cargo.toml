@@ -1,7 +1,7 @@
 [package]
 name = "run-within"
 version = "0.1.0"
-description = "Run a program under a deadline: its whole process tree killed when the deadline passes, its output kept bounded per stream, and the wait for that output bounded too, so a descendant that outlives the program cannot hang the caller."
+description = "Run a program under a deadline: its whole process tree killed when the deadline passes, its output kept bounded per stream, and the wait for that output bounded too, so a descendant that outlives the program cannot hang the caller; or a long-lived program on live pipes, with no deadline, its tree ended through a shared handle."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

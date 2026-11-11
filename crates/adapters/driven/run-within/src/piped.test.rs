@@ -46,8 +46,12 @@ impl Machine {
     }
 }
 
-fn piped(body: &str) -> (Piped, Pipes) {
-    run_piped(&Machine::new().spec(body), |_| {}).unwrap()
+/// `body` started on pipes; the machine holds its script, so it is kept
+/// until the program has read it.
+fn piped(body: &str) -> (Piped, Pipes, Machine) {
+    let machine = Machine::new();
+    let (child, pipes) = run_piped(&machine.spec(body), |_| {}).unwrap();
+    (child, pipes, machine)
 }
 
 /// The next line of `reader`, as text.
@@ -55,6 +59,14 @@ fn line(reader: &mut impl BufRead) -> String {
     let mut line = String::new();
     reader.read_line(&mut line).unwrap();
     line
+}
+
+/// The rest of `reader`, to its end: when every holder of the pipe's write
+/// end has closed it, which a killed descendant has.
+fn rest(reader: &mut impl BufRead) -> String {
+    let mut rest = String::new();
+    reader.read_to_string(&mut rest).unwrap();
+    rest
 }
 
 fn say(stdin: &mut impl Write, text: &str) {
@@ -76,7 +88,7 @@ fn a_line_written_is_answered_while_the_program_runs_and_its_eof_ends_it() {
     if !runs_scripts() {
         return;
     }
-    let (child, pipes) =
+    let (child, pipes, _machine) =
         piped("while read -r line; do echo \"out:$line\"; echo \"err:$line\" >&2; done; exit 5");
     let Pipes {
         mut stdin,
@@ -108,8 +120,10 @@ fn started_is_called_once_with_the_pid_the_handle_gives() {
     }
     let machine = Machine::new();
     let mut seen = Vec::new();
-    let (child, pipes) =
-        run_piped(&machine.spec("echo $$; read -r x"), |pid| seen.push(pid)).unwrap();
+    let (child, pipes) = run_piped(&machine.spec("echo $$; read -r x; exit 0"), |pid| {
+        seen.push(pid)
+    })
+    .unwrap();
     assert_eq!(seen, [child.id()]);
     let mut stdout = BufReader::new(pipes.stdout);
     assert_eq!(line(&mut stdout).trim(), child.id().to_string());
@@ -132,7 +146,8 @@ fn the_environment_is_exactly_the_specs_and_its_input_is_not_fed() {
     if !runs_scripts() {
         return;
     }
-    let spec = Machine::new()
+    let machine = Machine::new();
+    let spec = machine
         .spec("echo \"a=${A-unset} home=${HOME-unset}\"; read -r x; echo \"got:$x\"")
         .envs([("A", "1")])
         .stdin("fed\n");
@@ -153,8 +168,10 @@ fn a_kill_from_another_thread_ends_a_wait_and_the_whole_tree() {
     if !runs_scripts() {
         return;
     }
-    let (child, pipes) = piped("sleep 30 & echo $!; read -r x");
-    let descendant = line(&mut BufReader::new(pipes.stdout));
+    let (child, pipes, _machine) = piped("sleep 30 & echo $!; read -r x");
+    let mut stdout = BufReader::new(pipes.stdout);
+    let descendant = line(&mut stdout);
+    assert!(!process_gone(&descendant), "nothing ended it yet");
     let began = Instant::now();
     let waiter = {
         let child = child.clone();
@@ -163,10 +180,14 @@ fn a_kill_from_another_thread_ends_a_wait_and_the_whole_tree() {
     child.kill_tree().unwrap();
     let status = waiter.join().unwrap().unwrap();
     assert_eq!(status.code(), None, "a kill ended it");
-    assert!(began.elapsed() < PROMPT);
+    assert_eq!(
+        rest(&mut stdout),
+        "",
+        "the descendant {descendant} closed it"
+    );
     assert!(
-        process_gone(&descendant),
-        "the descendant {descendant} lives"
+        began.elapsed() < PROMPT,
+        "its end was the kill, not its sleep"
     );
     // The stdin is still held: the kill, not an end of input, ended it.
     drop(pipes.stdin);
@@ -178,14 +199,21 @@ fn a_kill_after_the_program_exited_still_ends_what_it_left_running() {
     if !runs_scripts() {
         return;
     }
-    let (child, pipes) = piped("sleep 30 & echo $!; exit 0");
-    let descendant = line(&mut BufReader::new(pipes.stdout));
+    let (child, pipes, _machine) = piped("sleep 30 & echo $!; exit 0");
+    let mut stdout = BufReader::new(pipes.stdout);
+    let descendant = line(&mut stdout);
     assert_eq!(child.wait().unwrap().code(), Some(0));
     assert!(!process_gone(&descendant), "nothing ended it yet");
+    let began = Instant::now();
     child.kill_tree().unwrap();
+    assert_eq!(
+        rest(&mut stdout),
+        "",
+        "the descendant {descendant} closed it"
+    );
     assert!(
-        process_gone(&descendant),
-        "the descendant {descendant} lives"
+        began.elapsed() < PROMPT,
+        "its end was the kill, not its sleep"
     );
     assert_eq!(
         child.wait().unwrap().code(),
@@ -199,7 +227,8 @@ fn a_terminate_asks_the_tree_first_and_the_program_may_finish() {
     if !runs_scripts() {
         return;
     }
-    let (child, pipes) = piped("trap 'echo asked; exit 7' TERM; echo ready; sleep 30 & wait");
+    let (child, pipes, _machine) =
+        piped("trap 'echo asked; exit 7' TERM; echo ready; sleep 30 & wait");
     let mut stdout = BufReader::new(pipes.stdout);
     assert_eq!(line(&mut stdout), "ready\n", "its trap is set");
     let began = Instant::now();

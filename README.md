@@ -18,7 +18,7 @@ arguments.
 | `sqlite-store-opener` | `crates/adapters/driven/sqlite-store-opener` | opens a project's SQLite event store at a caller-named path (to write or read-only), refuses one from before the embedded store, and checks one for damage |
 | `process-env` | `crates/root/lib/process-env` | the once-read snapshot of the process environment |
 | `project-dir` | `crates/adapters/driven/project-dir` | the project-root rule over the filesystem seam |
-| `run-within` | `crates/adapters/driven/run-within` | run a program under a deadline: its process tree killed, its output bounded, the wait for it bounded |
+| `run-within` | `crates/adapters/driven/run-within` | run a program under a deadline: its process tree killed, its output bounded, the wait for it bounded; or a long-lived program on live pipes with no deadline (`run_piped`), its tree ended through a shared handle |
 | `fixture-program` | `crates/adapters/driven/fixture-program` | test support: a fake program (a script) a test runs by path, never exec'd as written, so it cannot fail with ETXTBSY |
 | `duration-text` | `crates/core/domain/duration-text` | the grammar of a span (`1h30m`, `1.5d`) or a date as text: parse, cutoff, age and exact comparison, over std's `Duration` and `SystemTime` |
 

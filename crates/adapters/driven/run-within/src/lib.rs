@@ -72,6 +72,41 @@
 //! not exercised. No test attaches a real tty: the inheritance and
 //! group invariants are proved, not the terminal's own job control.
 //!
+//! # Piped mode
+//!
+//! [`run_piped`] starts a LONG-LIVED program the caller converses with (a
+//! line protocol over stdin and stdout, say). Its invariants:
+//!
+//! - Its stdin, stdout and stderr are pipes, handed to the caller as
+//!   [`Pipes`]; nothing is captured or capped, so [`Within`] does not apply
+//!   and the [`Spec`]'s input is ignored. Dropping the stdin is the
+//!   program's end of input. The caller reads both outputs, or drops the
+//!   one it does not want: a full pipe no one reads blocks the program.
+//! - There is no deadline. The program runs until it exits, or until the
+//!   caller ends its tree through the [`Piped`] handle:
+//!   [`kill_tree`](Piped::kill_tree) (the deadline kill's, the whole tree at
+//!   once) or [`terminate_tree`](Piped::terminate_tree) (the stop's: asked,
+//!   a grace, then killed).
+//! - It is a tree of its own, as in [`run_within`]: the same limits (a
+//!   descendant that leaves the group escapes; a Ctrl-C at the terminal does
+//!   not reach it), and a kill after the program exited still ends what it
+//!   left running. Dropping the handle ends nothing.
+//! - The environment is exactly the [`Spec`]'s, and `started` is called once
+//!   with the pid after the spawn, never when it failed, as in
+//!   [`run_within_started`].
+//! - The handle is `Clone + Send + Sync`: one thread waits
+//!   ([`Piped::wait`], which asks between pauses and never blocks in the
+//!   system's wait) while another ends the tree.
+//!
+//! It is synchronous, std pipes and the caller's threads, like the rest of
+//! this crate: no async runtime is linked, so a consumer on any runtime (or
+//! none) can use it. The pipes are std's `ChildStdin`, `ChildStdout` and
+//! `ChildStderr`; a consumer that wants them async converts them on its own
+//! runtime (on unix each is an `OwnedFd`, which tokio's
+//! `net::unix::pipe::{Sender, Receiver}` take; anywhere, a blocking thread
+//! per pipe bridged to an async channel), and a blocking [`Piped::wait`] goes
+//! on a blocking thread (`spawn_blocking`) of its own.
+//!
 //! A program that exited normally and left a descendant running is not
 //! killed: the descendant may be meant to stay.
 //!
