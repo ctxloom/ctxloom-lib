@@ -24,9 +24,20 @@
 //! Limits, from [`os::process`]: a descendant that leaves the process
 //! group (`setsid`, `setpgid`) or the job object escapes the kill; and the
 //! program runs in a process group of its own, so a Ctrl-C at the terminal
-//! does not reach it. A caller that wants it to stop on Ctrl-C hears the
-//! signal itself ([`os::Os::stop_signal`]) and ends the tree; this crate
-//! returns only when its program is over.
+//! does not reach it. A caller that wants it to stop on a signal hears the
+//! signal itself ([`os::Os::signals`]) and requests the [`Stop`] it ran the
+//! program with ([`run_within_stopped_by`]); this crate returns only when
+//! its program is over.
+//!
+//! # Stopped
+//!
+//! [`run_within_stopped_by`] is [`run_within_started`] that also ends when a
+//! [`Stop`] is requested (a caller that heard a signal asking it to stop):
+//! the tree is asked to stop (SIGTERM to the group on unix; on Windows,
+//! which has no ask, the kill is at once), the program gets
+//! [`Within::stop_grace`] to exit, then whatever is left of the tree is
+//! killed, and the outcome is [`stopped`](Outcome::stopped) with the
+//! program's status.
 //!
 //! # Started
 //!
@@ -49,7 +60,7 @@
 //!   the caller's [`Stop`] has been requested, which kills the DIRECT child
 //!   (SIGKILL on unix, `TerminateProcess` on Windows) and reports it
 //!   [`stopped`](TerminalOutcome::stopped). The caller turns the platform's
-//!   stop signal ([`os::Os::stop_signal`]) into [`Stop::request`] on its own
+//!   signals ([`os::Os::signals`]) into [`Stop::request`] on its own
 //!   runtime.
 //! - The tree is NOT killed: with no group of its own there is no handle on
 //!   the descendants, and signalling the caller's own group would signal the
@@ -236,6 +247,9 @@ pub struct Within {
     pub drain_grace: Duration,
     /// The most of each stream that is kept; the rest is discarded.
     pub max_bytes: usize,
+    /// How long, once a stop is requested ([`run_within_stopped_by`]), the
+    /// program has to exit after the ask before its tree is killed.
+    pub stop_grace: Duration,
 }
 
 impl Within {
@@ -243,15 +257,25 @@ impl Within {
     pub const DRAIN_GRACE: Duration = Duration::from_secs(2);
     /// The default cap on each stream: 64 MiB.
     pub const MAX_BYTES: usize = 64 * 1024 * 1024;
+    /// The default grace after a stop is asked.
+    pub const STOP_GRACE: Duration = Duration::from_secs(5);
 
     /// `deadline` for the program, [`DRAIN_GRACE`](Self::DRAIN_GRACE) for
-    /// its output after, [`MAX_BYTES`](Self::MAX_BYTES) of each stream.
+    /// its output after, [`MAX_BYTES`](Self::MAX_BYTES) of each stream,
+    /// [`STOP_GRACE`](Self::STOP_GRACE) after a stop is asked.
     pub fn new(deadline: Duration) -> Within {
         Within {
             deadline,
             drain_grace: Self::DRAIN_GRACE,
             max_bytes: Self::MAX_BYTES,
+            stop_grace: Self::STOP_GRACE,
         }
+    }
+
+    /// The same, giving the program `grace` to exit once a stop is asked.
+    pub fn stop_grace(mut self, grace: Duration) -> Within {
+        self.stop_grace = grace;
+        self
     }
 
     /// The same, with `grace` to read the output after the program is over.
@@ -278,6 +302,10 @@ pub struct Outcome {
     pub stderr: Vec<u8>,
     /// The deadline passed and the tree was killed.
     pub timed_out: bool,
+    /// A stop was requested while the program ran, and the tree was asked
+    /// to stop, then killed ([`run_within_stopped_by`]). A program that
+    /// exited by itself is not `stopped`.
+    pub stopped: bool,
     /// Some output beyond the cap was discarded.
     pub truncated: bool,
     /// A pipe was still open when the drain grace ended: a process that
@@ -301,6 +329,20 @@ pub fn run_within_started(
     within: &Within,
     started: impl FnOnce(u32),
 ) -> Result<Outcome, RunError> {
+    run_within_stopped_by(spec, within, &Stop::new(), started)
+}
+
+/// [`run_within_started`], also ending when `stop` is requested: the tree is
+/// asked to stop, given [`Within::stop_grace`], then killed, and the outcome
+/// is [`stopped`](Outcome::stopped). A `stop` requested before the call still
+/// lets the program start (and `started` be called); it is asked to stop at
+/// the first look.
+pub fn run_within_stopped_by(
+    spec: &Spec,
+    within: &Within,
+    stop: &Stop,
+    started: impl FnOnce(u32),
+) -> Result<Outcome, RunError> {
     let mut tree = spawn_tree(spec.command()).map_err(|e| RunError::spawn(spec.name(), e))?;
     started(tree.id());
     let (done_tx, done_rx) = mpsc::channel();
@@ -308,12 +350,23 @@ pub fn run_within_started(
     let stderr = capture::start(tree.take_stderr(), within.max_bytes, done_tx);
     feed(&mut tree, spec);
     let mut ended = Ended::default();
-    let status = wait(&mut tree, spec, within.deadline, &done_rx, &mut ended)?;
+    let until = Until {
+        deadline: within.deadline,
+        stop,
+        stop_grace: within.stop_grace,
+    };
+    let over = wait(&mut tree, spec, &until, &done_rx, &mut ended)?;
     let drain_incomplete = !drain(&done_rx, &mut ended, within.drain_grace);
     let (stdout, cut_out) = stdout.take();
     let (stderr, cut_err) = stderr.take();
+    let (status, timed_out, stopped) = match over {
+        Over::Exited(status) => (Some(status), false, false),
+        Over::TimedOut => (None, true, false),
+        Over::Stopped(status) => (status, false, true),
+    };
     Ok(Outcome {
-        timed_out: status.is_none(),
+        timed_out,
+        stopped,
         status,
         stdout,
         stderr,
@@ -350,6 +403,7 @@ fn feed(tree: &mut Tree, spec: &Spec) {
 trait Running {
     fn try_wait(&mut self) -> std::io::Result<Option<ExitStatus>>;
     fn kill_tree(&mut self) -> std::io::Result<()>;
+    fn terminate_tree(&mut self, grace: Duration) -> std::io::Result<()>;
 }
 
 impl Running for Tree {
@@ -360,23 +414,51 @@ impl Running for Tree {
     fn kill_tree(&mut self) -> std::io::Result<()> {
         Tree::kill_tree(self)
     }
+
+    fn terminate_tree(&mut self, grace: Duration) -> std::io::Result<()> {
+        Tree::terminate_tree(self, grace)
+    }
 }
 
-/// Wait for the program to exit: its status, or `None` once the deadline
-/// passed and its tree was killed. Nothing here blocks in a wait that a kill
-/// would have to get past: the program is asked, and the pause between asks
-/// ends early when a reader finishes.
+/// When a [`wait`] gives up on the program: at its deadline, or at a stop.
+struct Until<'a> {
+    deadline: Duration,
+    stop: &'a Stop,
+    stop_grace: Duration,
+}
+
+/// How a [`wait`] ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Over {
+    /// The program exited by itself.
+    Exited(ExitStatus),
+    /// The deadline passed and the tree was killed.
+    TimedOut,
+    /// A stop was requested: the tree was asked to stop, then killed; the
+    /// program's status, when the system still gives it.
+    Stopped(Option<ExitStatus>),
+}
+
+/// Wait for the program to exit, its deadline to pass (its tree killed) or a
+/// stop to be requested (its tree asked to stop, then killed). Nothing here
+/// blocks in a wait that a kill would have to get past: the program is asked,
+/// and the pause between asks ends early when a reader finishes. The exit is
+/// asked first, so a program that is over is never reported stopped.
 fn wait(
     tree: &mut impl Running,
     spec: &Spec,
-    deadline: Duration,
+    until: &Until<'_>,
     done: &Receiver<()>,
     ended: &mut Ended,
-) -> Result<Option<ExitStatus>, RunError> {
-    let deadline = Instant::now() + deadline;
+) -> Result<Over, RunError> {
+    let deadline = Instant::now() + until.deadline;
+    let killed = |source| RunError::Kill {
+        program: spec.name(),
+        source,
+    };
     loop {
         match tree.try_wait() {
-            Ok(Some(status)) => return Ok(Some(status)),
+            Ok(Some(status)) => return Ok(Over::Exited(status)),
             Ok(None) => {}
             Err(source) => {
                 let _ = tree.kill_tree();
@@ -386,15 +468,14 @@ fn wait(
                 });
             }
         }
+        // Red: the stop is not heard yet.
+        if until.stop.is_requested() && until.stop_grace.is_zero() {
+            tree.terminate_tree(until.stop_grace).map_err(killed)?;
+            return Ok(Over::Stopped(None));
+        }
         let left = deadline.saturating_duration_since(Instant::now());
         if left.is_zero() {
-            return tree
-                .kill_tree()
-                .map(|()| None)
-                .map_err(|source| RunError::Kill {
-                    program: spec.name(),
-                    source,
-                });
+            return tree.kill_tree().map(|()| Over::TimedOut).map_err(killed);
         }
         if done.recv_timeout(left.min(POLL)).is_ok() {
             ended.0 += 1;

@@ -11,7 +11,8 @@ use crate::{RunError, Spec};
 /// after.
 const POLL: Duration = Duration::from_millis(5);
 
-/// A request, from anywhere, that a [`run_terminal`] end its program. Clones
+/// A request, from anywhere, that a [`run_terminal`] or a
+/// [`run_within_stopped_by`](crate::run_within_stopped_by) end its program. Clones
 /// share the request: it is made once and stays made.
 #[derive(Clone, Debug, Default)]
 pub struct Stop(Arc<AtomicBool>);

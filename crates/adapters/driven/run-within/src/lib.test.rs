@@ -329,9 +329,78 @@ fn the_defaults_and_their_overrides() {
     assert_eq!(within.deadline, Duration::from_secs(7));
     assert_eq!(within.drain_grace, Duration::from_secs(2));
     assert_eq!(within.max_bytes, 64 * 1024 * 1024);
-    let within = within.drain_grace(TINY).max_bytes(5);
-    assert_eq!((within.drain_grace, within.max_bytes), (TINY, 5));
+    assert_eq!(within.stop_grace, Duration::from_secs(5));
+    let within = within.drain_grace(TINY).max_bytes(5).stop_grace(LONG);
+    assert_eq!(
+        (within.drain_grace, within.max_bytes, within.stop_grace),
+        (TINY, 5, LONG)
+    );
     assert_eq!(within.deadline, Duration::from_secs(7));
+}
+
+// --- a stop
+
+/// `body` run until it is over, with a stop requested as soon as it has
+/// started.
+fn stopped(body: &str, within: &Within) -> (Outcome, Duration) {
+    let stop = Stop::new();
+    let began = Instant::now();
+    let out = run_within_stopped_by(&Machine::new().spec(body), within, &stop, |_| {
+        stop.request()
+    })
+    .unwrap();
+    (out, began.elapsed())
+}
+
+#[test]
+fn a_stop_asks_the_tree_to_stop_and_the_grace_lets_it_finish() {
+    if !runs_scripts() {
+        return;
+    }
+    // The program hears the ask and exits on its own terms, inside the grace.
+    let (out, took) = stopped(
+        "trap 'echo asked; exit 7' TERM; sleep 30 & wait",
+        &Within::new(LONG).stop_grace(LONG),
+    );
+    assert!(out.stopped && !out.timed_out);
+    assert_eq!(code(out.status), Some(7), "the ask, not a kill, ended it");
+    assert_eq!(text(&out.stdout), "asked\n");
+    assert!(took < PROMPT, "the stop took {took:?}");
+}
+
+#[test]
+fn a_tree_that_ignores_the_ask_is_killed_once_the_grace_is_over() {
+    if !runs_scripts() {
+        return;
+    }
+    let grace = Duration::from_millis(300);
+    let (out, took) = stopped(
+        "trap '' TERM; sleep 30",
+        &Within::new(LONG).stop_grace(grace),
+    );
+    assert!(out.stopped && !out.timed_out);
+    assert_eq!(code(out.status), None, "a kill ended it");
+    assert!(took >= grace, "killed before the grace was over: {took:?}");
+    assert!(took < PROMPT, "the stop took {took:?}");
+}
+
+#[test]
+fn a_program_that_exits_by_itself_is_not_stopped() {
+    if !runs_scripts() {
+        return;
+    }
+    let out = run("exit 0", &Within::new(LONG));
+    assert!(!out.stopped && !out.timed_out);
+    let stop = Stop::new();
+    let out = run_within_stopped_by(
+        &Machine::new().spec("exit 4"),
+        &Within::new(LONG),
+        &stop,
+        |_| {},
+    )
+    .unwrap();
+    assert!(!out.stopped);
+    assert_eq!(code(out.status), Some(4));
 }
 
 // --- the system's calls failing, which a real program does not make them do.
@@ -342,6 +411,8 @@ struct Fake {
     asks: usize,
     kill: Option<io::Error>,
     killed: bool,
+    /// The grace each ask to stop was given.
+    terminated: Vec<Duration>,
 }
 
 impl Fake {
@@ -351,6 +422,7 @@ impl Fake {
             asks: 0,
             kill,
             killed: false,
+            terminated: Vec::new(),
         }
     }
 }
@@ -369,18 +441,72 @@ impl Running for Fake {
         self.killed = true;
         self.kill.take().map_or(Ok(()), Err)
     }
+
+    fn terminate_tree(&mut self, grace: Duration) -> io::Result<()> {
+        self.terminated.push(grace);
+        self.kill.take().map_or(Ok(()), Err)
+    }
 }
 
-fn waited(fake: &mut Fake, deadline: Duration) -> Result<Option<ExitStatus>, RunError> {
+fn waited_until(fake: &mut Fake, deadline: Duration, stop: &Stop) -> Result<Over, RunError> {
     let (tx, rx) = mpsc::channel();
     let _keep = tx;
-    wait(
-        fake,
-        &Spec::new("demo"),
+    let until = Until {
         deadline,
-        &rx,
-        &mut Ended::default(),
-    )
+        stop,
+        stop_grace: TINY,
+    };
+    wait(fake, &Spec::new("demo"), &until, &rx, &mut Ended::default())
+}
+
+/// The status a wait without a stop gave: `None` at the deadline.
+fn waited(fake: &mut Fake, deadline: Duration) -> Result<Option<ExitStatus>, RunError> {
+    waited_until(fake, deadline, &Stop::new()).map(|over| match over {
+        Over::Exited(status) => Some(status),
+        Over::TimedOut => None,
+        Over::Stopped(_) => panic!("stopped with no stop requested"),
+    })
+}
+
+#[test]
+fn a_requested_stop_asks_the_tree_with_its_grace_and_gives_the_status_after() {
+    if !runs_scripts() {
+        return;
+    }
+    let status = run("exit 9", &Within::new(LONG)).status.unwrap();
+    let stop = Stop::new();
+    stop.request();
+    let mut fake = Fake::new(vec![Ok(None), Ok(Some(status))], None);
+    let over = waited_until(&mut fake, LONG, &stop).unwrap();
+    assert_eq!(over, Over::Stopped(Some(status)));
+    assert_eq!(fake.terminated, [TINY]);
+    assert!(!fake.killed, "asked, not killed outright");
+}
+
+#[test]
+fn a_program_over_when_the_stop_is_requested_is_not_stopped() {
+    if !runs_scripts() {
+        return;
+    }
+    let status = run("exit 0", &Within::new(LONG)).status.unwrap();
+    let stop = Stop::new();
+    stop.request();
+    let mut fake = Fake::new(vec![Ok(Some(status))], None);
+    assert_eq!(
+        waited_until(&mut fake, LONG, &stop).unwrap(),
+        Over::Exited(status)
+    );
+    assert!(fake.terminated.is_empty());
+}
+
+#[test]
+fn a_stop_whose_ask_fails_is_a_kill_error() {
+    let stop = Stop::new();
+    stop.request();
+    let mut fake = Fake::new(vec![Ok(None)], Some(io::Error::other("denied")));
+    let error = waited_until(&mut fake, LONG, &stop).unwrap_err();
+    assert!(matches!(error, RunError::Kill { .. }), "{error}");
+    assert_eq!(error.io().to_string(), "denied");
 }
 
 #[test]
