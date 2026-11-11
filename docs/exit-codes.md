@@ -69,6 +69,11 @@ What belongs where:
 An argument parser's request for help or for the version is a success (0),
 not a usage error.
 
+A child program's own exit status is not one of these codes, and is never
+passed through as it is: a child's 1 would read as a success subcode. It is
+said in the classes: 0 is ok, a child ended by signal `n` (or a shell's
+`128+n`) is signal `n`, and any other status is a failure (10).
+
 ## When two outcomes apply
 
 A command sometimes has more than one thing to report: a launch both refused
@@ -141,7 +146,8 @@ defined codes as constants (`Exit::OK`, `Exit::WOULD_CHANGE`,
 `Exit::FAILED`, `Exit::REFUSED`, `Exit::FATAL_FINDINGS`), `Exit::code`, the
 single function that turns an exit and the `--detailed-exitcode` flag into
 the process's status and holds the collapse rule, `Exit::worst` (and the
-type's ordering), which is the severity order, and `Exit::usage`, which maps
+type's ordering), which is the severity order, and `Exit::from_child_status`,
+which says a child program's status in the classes, and `Exit::usage`, which maps
 an argument parser's verdict to 20 for a usage error (or to 0 for help and
 version). An error type says its own class by implementing `ExitClass`. In
 `cli-support`, a command's `Failure` carries its `Exit` (`Failure::of` takes

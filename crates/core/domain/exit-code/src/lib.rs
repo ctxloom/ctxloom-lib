@@ -132,8 +132,13 @@ impl Exit {
     /// passed through (its 1 would read as a success). Ok for 0; the signal
     /// for a signal in 1..=127, or a shell's 128 plus one; failed (10) for
     /// any other status, or none.
-    pub const fn from_child_status(_code: Option<i32>, _signal: Option<i32>) -> Exit {
-        Exit::OK
+    pub const fn from_child_status(code: Option<i32>, signal: Option<i32>) -> Exit {
+        match (code, signal) {
+            (_, Some(n @ 1..=127)) => Exit::signal(n as u8),
+            (Some(0), None) => Exit::OK,
+            (Some(status @ 129..=255), None) => Exit::signal(status as u8 - SIGNAL_BASE),
+            _ => Exit::FAILED,
+        }
     }
 
     /// The more severe of `self` and `other`, the one a command that has
