@@ -340,15 +340,26 @@ fn the_defaults_and_their_overrides() {
 
 // --- a stop
 
-/// `body` run until it is over, with a stop requested as soon as it has
-/// started.
+/// `body` run until it is over, with a stop requested once it says it is
+/// ready (`ready` in the body is a command that says so: it touches a file
+/// the test watches), so its traps are set before the ask.
 fn stopped(body: &str, within: &Within) -> (Outcome, Duration) {
+    let machine = Machine::new();
+    let ready = machine.dir.join("ready");
+    let real = machine.real_dir().join("ready");
+    let spec = machine.spec(&body.replace("ready", &format!(": > '{}'", real.display())));
     let stop = Stop::new();
     let began = Instant::now();
-    let out = run_within_stopped_by(&Machine::new().spec(body), within, &stop, |_| {
-        stop.request()
-    })
-    .unwrap();
+    let run = {
+        let (stop, within) = (stop.clone(), *within);
+        std::thread::spawn(move || run_within_stopped_by(&spec, &within, &stop, |_| {}).unwrap())
+    };
+    let deadline = Instant::now() + PROMPT;
+    while !machine.fs.exists(&ready).unwrap() && Instant::now() < deadline {
+        std::thread::yield_now();
+    }
+    stop.request();
+    let out = run.join().unwrap();
     (out, began.elapsed())
 }
 
@@ -359,7 +370,7 @@ fn a_stop_asks_the_tree_to_stop_and_the_grace_lets_it_finish() {
     }
     // The program hears the ask and exits on its own terms, inside the grace.
     let (out, took) = stopped(
-        "trap 'echo asked; exit 7' TERM; sleep 30 & wait",
+        "trap 'echo asked; exit 7' TERM; ready; sleep 30 & wait",
         &Within::new(LONG).stop_grace(LONG),
     );
     assert!(out.stopped && !out.timed_out);
@@ -375,7 +386,7 @@ fn a_tree_that_ignores_the_ask_is_killed_once_the_grace_is_over() {
     }
     let grace = Duration::from_millis(300);
     let (out, took) = stopped(
-        "trap '' TERM; sleep 30",
+        "trap '' TERM; ready; sleep 30",
         &Within::new(LONG).stop_grace(grace),
     );
     assert!(out.stopped && !out.timed_out);

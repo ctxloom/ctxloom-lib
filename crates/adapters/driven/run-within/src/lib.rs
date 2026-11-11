@@ -468,10 +468,9 @@ fn wait(
                 });
             }
         }
-        // Red: the stop is not heard yet.
-        if until.stop.is_requested() && until.stop_grace.is_zero() {
+        if until.stop.is_requested() {
             tree.terminate_tree(until.stop_grace).map_err(killed)?;
-            return Ok(Over::Stopped(None));
+            return Ok(Over::Stopped(tree.try_wait().ok().flatten()));
         }
         let left = deadline.saturating_duration_since(Instant::now());
         if left.is_zero() {
