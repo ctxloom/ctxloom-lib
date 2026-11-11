@@ -97,6 +97,15 @@ message in `locales/en-US/<crate>.ftl` using exactly its args, and a sample in
 the crate's `diagnostic_samples()`; the crate exports its catalog as `EN_US`
 for each consuming binary to assemble. Generated code is never committed.
 
+## Exit codes follow docs/exit-codes.md
+
+`docs/exit-codes.md` is the exit-code convention (blocks: 0-9 successes, 1-9
+only under `--detailed-exitcode`; 10-19 failures; 20-29 declines; 128+n
+signals; the higher detailed code is the more severe), written to be copied
+unchanged into any project. `cli-support`'s `Exit` encodes it, and its
+rustdoc renders the document (`cli_support::convention`); a `Failure` carries
+an `Exit`, never a raw code.
+
 ## Pins: by full commit, one of each
 
 Every dependency outside this repository is a git dependency pinned by full

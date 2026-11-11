@@ -12,6 +12,9 @@
 
 use std::process::ExitCode;
 
+/// A signal's code is this plus its number (the shell's convention).
+const SIGNAL_BASE: u8 = 128;
+
 /// The class of an [`Exit`]: which block its code is in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Class {
@@ -37,56 +40,84 @@ impl Exit {
     pub const OK: Exit = Exit(0);
     /// 1: a dry run or preview succeeded, and applying it would change
     /// something (returned only under `--detailed-exitcode`).
-    pub const WOULD_CHANGE: Exit = Exit(0);
+    pub const WOULD_CHANGE: Exit = Exit(1);
     /// 10: the command tried and something broke.
-    pub const FAILED: Exit = Exit(0);
+    pub const FAILED: Exit = Exit(10);
     /// 20: the request or the state forbids it (a usage error too).
-    pub const REFUSED: Exit = Exit(0);
+    pub const REFUSED: Exit = Exit(20);
     /// 21: the input was examined and cannot produce a working result.
-    pub const FATAL_FINDINGS: Exit = Exit(0);
+    pub const FATAL_FINDINGS: Exit = Exit(21);
 
     /// The success `code`, 0 to 9. Panics on any other.
     pub const fn success(code: u8) -> Exit {
+        assert!(code <= 9, "a success is a code from 0 to 9");
         Exit(code)
     }
 
     /// The failure `code`, 10 to 19. Panics on any other.
     pub const fn failed(code: u8) -> Exit {
+        assert!(
+            10 <= code && code <= 19,
+            "a failure is a code from 10 to 19"
+        );
         Exit(code)
     }
 
     /// The decline `code`, 20 to 29. Panics on any other.
     pub const fn declined(code: u8) -> Exit {
+        assert!(
+            20 <= code && code <= 29,
+            "a decline is a code from 20 to 29"
+        );
         Exit(code)
     }
 
     /// Stopped by signal `number`, 1 to 127: the code 128 + `number`.
     /// Panics on any other.
     pub const fn signal(number: u8) -> Exit {
-        Exit(number)
+        assert!(
+            1 <= number && number <= 127,
+            "a signal is numbered from 1 to 127"
+        );
+        Exit(SIGNAL_BASE + number)
     }
 
     /// The exit of an argument parser's error: a usage error is refused
     /// (20, never the parser's own 2); help and version are ok.
-    pub fn usage(_error: &clap::Error) -> Exit {
-        Exit::OK
+    pub fn usage(error: &clap::Error) -> Exit {
+        if error.use_stderr() {
+            Exit::REFUSED
+        } else {
+            Exit::OK
+        }
     }
 
     /// The block this exit is in.
     pub const fn class(self) -> Class {
-        Class::Success
+        match self.0 {
+            0..=9 => Class::Success,
+            10..=19 => Class::Failed,
+            20..=29 => Class::Declined,
+            _ => Class::Signalled,
+        }
     }
 
     /// The signal that stopped the command, if a signal did.
     pub const fn signal_number(self) -> Option<u8> {
-        None
+        match self.class() {
+            Class::Signalled => Some(self.0 - SIGNAL_BASE),
+            _ => None,
+        }
     }
 
     /// The process's exit status. This is the one place the collapse rule
     /// lives: without `detailed` (the `--detailed-exitcode` flag) a success
     /// is 0 whatever its code; every other exit is its code.
-    pub const fn code(self, _detailed: bool) -> u8 {
-        self.0
+    pub const fn code(self, detailed: bool) -> u8 {
+        match self.class() {
+            Class::Success if !detailed => 0,
+            _ => self.0,
+        }
     }
 
     /// [`code`](Exit::code) as the process's [`ExitCode`].
@@ -99,8 +130,8 @@ impl Exit {
     /// outranks a failure (it is a verdict on the request, which a retry
     /// unchanged would meet again, where a failure may be transient); any
     /// error outranks a success; within a block the higher code wins.
-    pub fn worst(self, _other: Exit) -> Exit {
-        self
+    pub fn worst(self, other: Exit) -> Exit {
+        self.max(other)
     }
 }
 

@@ -71,6 +71,6 @@ pub fn detailed_exitcode_arg() -> Arg {
 }
 
 /// Whether the line asked for `--detailed-exitcode`, read at any depth.
-pub fn detailed_exitcode(_matches: &ArgMatches) -> bool {
-    false
+pub fn detailed_exitcode(matches: &ArgMatches) -> bool {
+    flag(matches, DETAILED_EXITCODE)
 }
