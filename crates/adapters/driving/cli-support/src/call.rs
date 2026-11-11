@@ -6,12 +6,7 @@ use angzarr_diagnostic::Diagnostic;
 use angzarr_presentation::{Catalog, Format};
 use clap::ArgMatches;
 
-/// Exit code: the command failed.
-pub const EXIT_FAILED: u8 = 1;
-/// Exit code: the command was refused before any state was read.
-pub const EXIT_REFUSED: u8 = 2;
-/// Exit code: fatal findings (an answer may still have been printed).
-pub const EXIT_FATAL: u8 = 3;
+use crate::{Exit, ExitClass};
 
 /// One command, as an adapter is asked to run it. `G` is what the
 /// application adds to every call (its global flags): `()` when it adds
@@ -65,27 +60,34 @@ impl<'a, G> Call<'a, G> {
     }
 }
 
-/// Why a command did not complete: its own diagnostic, the exit code
-/// ([`EXIT_FAILED`], [`EXIT_REFUSED`] or [`EXIT_FATAL`]), and the refusals
+/// Why a command did not complete: its own diagnostic, the [`Exit`] it ends
+/// with (its class and code), and the refusals
 /// it gathered, in order, when it refuses for several reasons at once (none
 /// by default).
 #[derive(Debug)]
 pub struct Failure {
     pub cause: Box<dyn Diagnostic>,
-    pub exit: u8,
+    pub exit: Exit,
     /// Each reason the command was refused, in the order said; each is
     /// reported as a failure alone would be ([`say_failure`](crate::say_failure)).
     pub refusals: Vec<Box<dyn Diagnostic>>,
 }
 
 impl Failure {
+    /// `cause`, ending the command with the exit it says of itself
+    /// ([`ExitClass`]).
+    pub fn of(cause: impl Diagnostic + ExitClass + 'static) -> Failure {
+        let exit = cause.exit();
+        Failure::new(cause, exit)
+    }
+
     /// `cause`, ending the command with `exit`.
-    pub fn new(cause: impl Diagnostic + 'static, exit: u8) -> Failure {
+    pub fn new(cause: impl Diagnostic + 'static, exit: Exit) -> Failure {
         Failure::boxed(Box::new(cause), exit)
     }
 
     /// `cause`, already boxed, ending the command with `exit`.
-    pub fn boxed(cause: Box<dyn Diagnostic>, exit: u8) -> Failure {
+    pub fn boxed(cause: Box<dyn Diagnostic>, exit: Exit) -> Failure {
         Failure {
             cause,
             exit,
@@ -109,7 +111,7 @@ impl Failure {
 
     /// Say this failure on `err` in `format`: its cause, then its refusals
     /// ([`say_failure`](crate::say_failure)). The exit code is the caller's
-    /// to return.
+    /// to return ([`Exit::code`]).
     pub fn say(
         &self,
         program: &str,

@@ -3,7 +3,7 @@
 use std::io::{self, Write};
 
 use angzarr_presentation::{write_json, Format};
-use clap::ArgMatches;
+use clap::{Arg, ArgAction, ArgMatches};
 use serde::Serialize;
 
 use crate::Failure;
@@ -55,4 +55,22 @@ pub fn many(matches: &ArgMatches, name: &str) -> Vec<String> {
         .flatten()
         .map(|values| values.cloned().collect())
         .unwrap_or_default()
+}
+
+/// The name of the global flag that asks for the distinguishing successes
+/// (1-9) instead of 0 ([`Exit::code`](crate::Exit::code)).
+pub const DETAILED_EXITCODE: &str = "detailed-exitcode";
+
+/// The global `--detailed-exitcode` flag, for a program's top command.
+pub fn detailed_exitcode_arg() -> Arg {
+    Arg::new(DETAILED_EXITCODE)
+        .long(DETAILED_EXITCODE)
+        .action(ArgAction::SetTrue)
+        .global(true)
+        .help("Exit 1-9 for a success that says more (1: would change something); without it every success exits 0")
+}
+
+/// Whether the line asked for `--detailed-exitcode`, read at any depth.
+pub fn detailed_exitcode(_matches: &ArgMatches) -> bool {
+    false
 }

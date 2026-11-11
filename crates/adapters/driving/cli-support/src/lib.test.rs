@@ -155,8 +155,8 @@ fn test_a_call_answers_in_the_format_asked_for_else_the_default() {
 
 #[test]
 fn test_a_failure_carries_its_cause_and_exit() {
-    let failure = Failure::new(Note("x", ""), 2);
-    assert_eq!(failure.exit, 2);
+    let failure = Failure::new(Note("x", ""), Exit::REFUSED);
+    assert_eq!(failure.exit, Exit::REFUSED);
     assert_eq!(failure.cause.code(), "note");
 }
 
@@ -315,9 +315,14 @@ fn test_the_explicit_format_wins_whatever_the_default() {
 }
 
 #[test]
-fn test_a_failure_keeps_any_exit_code_it_is_given() {
-    // 1 failed, 2 refused before any state was read, 3 fatal findings
-    for exit in [0, 1, 2, 3, 255] {
+fn test_a_failure_keeps_any_exit_it_is_given() {
+    for exit in [
+        Exit::OK,
+        Exit::FAILED,
+        Exit::REFUSED,
+        Exit::FATAL_FINDINGS,
+        Exit::signal(127),
+    ] {
         assert_eq!(Failure::new(Note("x", ""), exit).exit, exit);
     }
 }
@@ -374,11 +379,6 @@ fn test_a_call_with_globals_carries_them_and_keeps_the_other_defaults() {
     assert!(std::ptr::eq(call.matches, &given));
 }
 
-#[test]
-fn test_the_exit_codes_are_failed_one_refused_two_fatal_three() {
-    assert_eq!((EXIT_FAILED, EXIT_REFUSED, EXIT_FATAL), (1, 2, 3));
-}
-
 fn reported(format: Format, text: ReportText) -> String {
     let mut err = Vec::new();
     report_failure(
@@ -427,11 +427,11 @@ fn test_emit_or_passes_a_written_answer_and_turns_a_failed_write_into_the_fault(
         |_| Err(std::io::Error::other("no")),
         |e| {
             assert_eq!(e.to_string(), "no");
-            Failure::new(Note("x", ""), EXIT_REFUSED)
+            Failure::new(Note("x", ""), Exit::REFUSED)
         },
     )
     .expect_err("the fault");
-    assert_eq!(failure.exit, EXIT_REFUSED);
+    assert_eq!(failure.exit, Exit::REFUSED);
 }
 
 // ---------------------------------------------------------------- refusals (ruling 73i)
@@ -448,7 +448,7 @@ fn both_catalog() -> Catalog {
 }
 
 fn refused(refusals: Vec<Box<dyn Diagnostic>>) -> Failure {
-    Failure::new(Note("it broke", "mend it"), EXIT_FATAL).with_refusals(refusals)
+    Failure::new(Note("it broke", "mend it"), Exit::FATAL_FINDINGS).with_refusals(refusals)
 }
 
 fn two_refusals() -> Vec<Box<dyn Diagnostic>> {
@@ -467,11 +467,11 @@ const ALONE_JSON: &str = "{\n  \"code\": \"note\",\n  \"args\": {\n    \"text\":
 
 #[test]
 fn test_a_new_failure_has_no_refusals() {
-    assert!(Failure::new(Note("x", ""), EXIT_REFUSED)
+    assert!(Failure::new(Note("x", ""), Exit::REFUSED)
         .refusals
         .is_empty());
-    let boxed = Failure::boxed(Box::new(Plain), EXIT_FAILED);
-    assert_eq!((boxed.cause.code(), boxed.exit), ("plain", EXIT_FAILED));
+    let boxed = Failure::boxed(Box::new(Plain), Exit::FAILED);
+    assert_eq!((boxed.cause.code(), boxed.exit), ("plain", Exit::FAILED));
     assert!(boxed.refusals.is_empty());
 }
 
@@ -484,7 +484,11 @@ fn test_refusals_keep_the_order_they_are_added_in() {
         failure.refusals[2].to_string(),
         Note("last", "").to_string()
     );
-    assert_eq!(failure.exit, EXIT_FATAL, "the exit is the failure's own");
+    assert_eq!(
+        failure.exit,
+        Exit::FATAL_FINDINGS,
+        "the exit is the failure's own"
+    );
 }
 
 #[test]
@@ -506,7 +510,7 @@ fn test_a_failure_without_refusals_is_its_envelope_and_fix_alone() {
 
 #[test]
 fn test_a_failure_without_a_fix_message_has_no_fix_key_or_line() {
-    let failure = Failure::new(Plain, EXIT_REFUSED);
+    let failure = Failure::new(Plain, Exit::REFUSED);
     assert_eq!(
         said(&failure, Format::Json),
         "{\n  \"code\": \"plain\",\n  \"args\": {\n    \"text\": \"no \\\"remedy\\\" here\"\n  },\n  \"message\": \"no \\\"remedy\\\" here\"\n}\n"
