@@ -6,3 +6,4 @@
 create-dir = cannot create the store's directory { $path }: { $ext_err_txt }
 unplaced = cannot find where the store { $path } is on disk: { $ext_err_txt }
 predates-embedded = the store { $path } predates angzarr-embedded: move it to { $backup } to start afresh
+restrict = cannot make the store's { $path } private to its owner, so it is not opened: { $ext_err_txt }

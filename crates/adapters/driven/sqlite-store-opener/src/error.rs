@@ -25,6 +25,9 @@ pub enum OpenError {
     /// (an earlier event store's): it is not migrated in place, but moved
     /// aside to `backup` and started afresh.
     PredatesEmbedded { path: String, backup: String },
+    /// The store's directory, file, log or shared memory at `path` could not
+    /// be made its owner's alone (0700, 0600), so it is not opened.
+    Restrict { path: String, detail: String },
     /// The store itself refused or failed, its error as it reports it (its
     /// code, its args, its catalog).
     Store(StoreError),
@@ -59,6 +62,10 @@ impl OpenError {
                 code!("predates-embedded"),
                 [("path", text(path)), ("backup", text(backup))],
             ),
+            OpenError::Restrict { path, detail } => Cause::new(
+                code!("restrict"),
+                [("path", text(path)), ("ext_err_txt", text(detail))],
+            ),
         };
         StoreError::Unavailable(cause)
     }
@@ -70,13 +77,16 @@ impl Diagnostic for OpenError {
             OpenError::CreateDir { .. } => code!("create-dir"),
             OpenError::Unplaced { .. } => code!("unplaced"),
             OpenError::PredatesEmbedded { .. } => code!("predates-embedded"),
+            OpenError::Restrict { .. } => code!("restrict"),
             OpenError::Store(error) => Diagnostic::code(error),
         }
     }
 
     fn args(&self) -> Vec<(&str, Arg)> {
         match self {
-            OpenError::CreateDir { path, detail } | OpenError::Unplaced { path, detail } => vec![
+            OpenError::CreateDir { path, detail }
+            | OpenError::Unplaced { path, detail }
+            | OpenError::Restrict { path, detail } => vec![
                 ("path", path.as_str().into()),
                 ("ext_err_txt", detail.as_str().into()),
             ],
@@ -105,6 +115,10 @@ pub fn diagnostic_samples() -> Vec<Box<dyn Diagnostic>> {
         Box::new(OpenError::PredatesEmbedded {
             path: format!("{}/store.db", dir()),
             backup: format!("{}/store.db.pre-embedded", dir()),
+        }),
+        Box::new(OpenError::Restrict {
+            path: format!("{}/store.db-wal", dir()),
+            detail: "operation not permitted".to_string(),
         }),
         Box::new(OpenError::Store(StoreError::Unavailable(
             angzarr_ports::Cause::new(

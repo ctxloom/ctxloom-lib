@@ -275,76 +275,105 @@ fn test_a_store_that_predates_the_embedded_store_is_refused_naming_its_backup() 
 
 /// A `Rooted` filesystem with one fault.
 #[derive(Debug)]
-struct Faulty(Rooted);
+struct Faulty {
+    fs: Rooted,
+    fault: Fault,
+}
+
+/// What a [`Faulty`] filesystem cannot do.
+#[derive(Debug)]
+enum Fault {
+    /// Say where anything is on disk, as a real path a Windows prefix
+    /// leaves relative cannot be.
+    Unplaced,
+    /// Set the mode of this path (the caller's).
+    NoMode(PathBuf),
+}
+
+impl Faulty {
+    fn new(fault: Fault) -> Faulty {
+        Faulty {
+            fs: Rooted::temp().unwrap(),
+            fault,
+        }
+    }
+}
 
 impl Fs for Faulty {
     fn cwd(&self) -> Result<&Path, file_system::CwdError> {
-        self.0.cwd()
+        self.fs.cwd()
     }
     fn os(&self) -> &dyn os::Os {
-        self.0.os()
+        self.fs.os()
     }
     fn read(&self, path: &Path) -> std::io::Result<Vec<u8>> {
-        self.0.read(path)
+        self.fs.read(path)
     }
     fn read_to_string(&self, path: &Path) -> std::io::Result<String> {
-        self.0.read_to_string(path)
+        self.fs.read_to_string(path)
     }
     fn write_atomic(&self, path: &Path, bytes: &[u8], perms: Perms) -> std::io::Result<()> {
-        self.0.write_atomic(path, bytes, perms)
+        self.fs.write_atomic(path, bytes, perms)
     }
     fn open(&self, path: &Path, how: file_system::Open) -> std::io::Result<std::fs::File> {
-        self.0.open(path, how)
+        self.fs.open(path, how)
     }
     fn create_dir_all(&self, path: &Path, mode: Mode) -> std::io::Result<()> {
-        self.0.create_dir_all(path, mode)
+        self.fs.create_dir_all(path, mode)
     }
     fn remove_file(&self, path: &Path) -> std::io::Result<()> {
-        self.0.remove_file(path)
+        self.fs.remove_file(path)
     }
     fn remove_dir_all(&self, path: &Path) -> std::io::Result<()> {
-        self.0.remove_dir_all(path)
+        self.fs.remove_dir_all(path)
     }
     fn rename(&self, from: &Path, to: &Path) -> std::io::Result<()> {
-        self.0.rename(from, to)
+        self.fs.rename(from, to)
     }
     fn set_permissions(&self, path: &Path, mode: Mode) -> std::io::Result<()> {
-        self.0.set_permissions(path, mode)
+        match &self.fault {
+            Fault::NoMode(refused) if refused == path => Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "no mode set",
+            )),
+            _ => self.fs.set_permissions(path, mode),
+        }
     }
     fn read_dir(&self, path: &Path) -> std::io::Result<Vec<file_system::Entry>> {
-        self.0.read_dir(path)
+        self.fs.read_dir(path)
     }
     fn metadata(&self, path: &Path) -> std::io::Result<file_system::Meta> {
-        self.0.metadata(path)
+        self.fs.metadata(path)
     }
     fn symlink_metadata(&self, path: &Path) -> std::io::Result<file_system::Meta> {
-        self.0.symlink_metadata(path)
+        self.fs.symlink_metadata(path)
     }
     fn exists(&self, path: &Path) -> std::io::Result<bool> {
-        self.0.exists(path)
+        self.fs.exists(path)
     }
     fn canonicalize(&self, path: &Path) -> std::io::Result<PathBuf> {
-        self.0.canonicalize(path)
+        self.fs.canonicalize(path)
     }
     fn symlink_dir(&self, target: &Path, link: &Path) -> std::io::Result<()> {
-        self.0.symlink_dir(target, link)
+        self.fs.symlink_dir(target, link)
     }
     fn read_link(&self, link: &Path) -> std::io::Result<PathBuf> {
-        self.0.read_link(link)
+        self.fs.read_link(link)
     }
     fn make_temp_dir(&self, parent: &Path, prefix: &str) -> std::io::Result<PathBuf> {
-        self.0.make_temp_dir(parent, prefix)
+        self.fs.make_temp_dir(parent, prefix)
     }
-    /// It cannot say where anything is on disk, as a real path a Windows
-    /// prefix leaves relative cannot be.
-    fn real_path(&self, _: &Path) -> std::io::Result<PathBuf> {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "no place on disk",
-        ))
+    fn real_path(&self, path: &Path) -> std::io::Result<PathBuf> {
+        match self.fault {
+            Fault::Unplaced => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "no place on disk",
+            )),
+            Fault::NoMode(_) => self.fs.real_path(path),
+        }
     }
     fn same_file(&self, file: &std::fs::File, path: &Path) -> std::io::Result<bool> {
-        self.0.same_file(file, path)
+        self.fs.same_file(file, path)
     }
 }
 
@@ -390,7 +419,7 @@ fn test_a_database_that_does_not_open_fails_with_the_stores_error() {
 
 #[test]
 fn test_a_store_the_filesystem_cannot_place_is_refused_naming_it() {
-    let opener = Opener::new(Arc::new(Faulty(Rooted::temp().unwrap())), FILE);
+    let opener = Opener::new(Arc::new(Faulty::new(Fault::Unplaced)), FILE);
     let path = PathBuf::from("/home/u/store.db");
     let expected = [
         ("path", "/home/u/store.db".to_string()),
@@ -720,4 +749,201 @@ fn sqlite_unavailable() -> &'static str {
         detail: String::new(),
     }
     .code()
+}
+
+// ------------------------------------------------------------ private to its owner
+//
+// A store is its owner's alone (owner ruling, 2026-11-12): its directory
+// 0700, the file and the `-wal` and `-shm` SQLite keeps beside it 0600,
+// whatever the umask; an existing store open to others is made so on its
+// next open, to write or to read. On Windows no mode is set: the profile's
+// ACL holds the store (ruling M8), so those assertions are a named SKIP.
+
+/// Whether this host keeps mode bits; says the named SKIP when it does not.
+fn modes_kept(test: &str) -> bool {
+    if os::host().flavor() == os::Flavor::Windows {
+        println!("SKIP {test}: Windows keeps no mode bits; the profile's ACL holds the store (ruling M8)");
+        return false;
+    }
+    true
+}
+
+impl Home {
+    /// `path`'s permission bits.
+    fn mode(&self, path: &Path) -> u32 {
+        self.rooted
+            .metadata(path)
+            .unwrap()
+            .mode
+            .expect("a mode on unix")
+            .bits()
+    }
+
+    fn chmod(&self, path: &Path, mode: Mode) {
+        self.rooted.set_permissions(path, mode).unwrap();
+    }
+}
+
+/// `path` with `suffix` after its file name: the `-wal` and `-shm` beside a
+/// store.
+fn beside(path: &Path, suffix: &str) -> PathBuf {
+    let mut name = path.as_os_str().to_owned();
+    name.push(suffix);
+    PathBuf::from(name)
+}
+
+#[test]
+fn test_a_new_store_and_every_directory_its_open_makes_are_its_owners_alone() {
+    let home = Home::new();
+    let path = store_in(home.path(), "jolly-mute-magma");
+    // Held open: a write's log and shared memory are beside it.
+    let store = block_on(home.opener().open_for_write(&path)).expect("opens");
+    if !modes_kept("test_a_new_store_and_every_directory_its_open_makes_are_its_owners_alone") {
+        return;
+    }
+    let dir = path.parent().unwrap();
+    for made in [dir, dir.parent().unwrap(), &home.path().join(APP)] {
+        assert_eq!(home.mode(made), 0o700, "{}", made.display());
+    }
+    assert_eq!(home.mode(&path), 0o600, "the store");
+    for companion in ["-wal", "-shm"] {
+        let companion = beside(&path, companion);
+        assert!(home.exists(&companion), "{} beside it", companion.display());
+        assert_eq!(home.mode(&companion), 0o600, "{}", companion.display());
+    }
+    drop(store);
+}
+
+#[test]
+fn test_an_existing_store_open_to_others_is_made_its_owners_on_a_write_open() {
+    let home = Home::new();
+    let path = store_in(home.path(), "jolly-mute-magma");
+    written(&home, &path);
+    let dir = path.parent().unwrap();
+    home.chmod(dir, Mode::DIR);
+    home.chmod(&path, Mode::FILE);
+    let store = block_on(home.opener().open_for_write(&path)).expect("opens");
+    if !modes_kept("test_an_existing_store_open_to_others_is_made_its_owners_on_a_write_open") {
+        return;
+    }
+    assert_eq!(home.mode(dir), 0o700, "its directory");
+    assert_eq!(home.mode(&path), 0o600, "the store");
+    drop(store);
+}
+
+#[test]
+fn test_an_existing_store_open_to_others_is_made_its_owners_on_a_read_open() {
+    let home = Home::new();
+    let path = store_in(home.path(), "jolly-mute-magma");
+    written(&home, &path);
+    let dir = path.parent().unwrap();
+    home.chmod(dir, Mode::DIR);
+    home.chmod(&path, Mode::FILE);
+    let store = block_on(home.opener().open_existing(&path))
+        .expect("opens")
+        .expect("found");
+    if !modes_kept("test_an_existing_store_open_to_others_is_made_its_owners_on_a_read_open") {
+        return;
+    }
+    assert_eq!(home.mode(dir), 0o700, "its directory");
+    assert_eq!(home.mode(&path), 0o600, "the store");
+    for companion in ["-wal", "-shm"] {
+        let companion = beside(&path, companion);
+        assert!(home.exists(&companion), "{} beside it", companion.display());
+        assert_eq!(home.mode(&companion), 0o600, "{}", companion.display());
+    }
+    drop(store);
+}
+
+#[test]
+fn test_a_log_and_shared_memory_open_to_others_are_made_the_owners_on_the_next_open() {
+    let home = Home::new();
+    let path = store_in(home.path(), "jolly-mute-magma");
+    // Held open, so its log and shared memory stay, as an earlier build
+    // left them: open to others.
+    let held = block_on(home.opener().open_for_write(&path)).expect("opens");
+    let (wal, shm) = (beside(&path, "-wal"), beside(&path, "-shm"));
+    if !modes_kept(
+        "test_a_log_and_shared_memory_open_to_others_are_made_the_owners_on_the_next_open",
+    ) {
+        return;
+    }
+    home.chmod(&wal, Mode::FILE);
+    home.chmod(&shm, Mode::FILE);
+    let written = block_on(home.opener().open_for_write(&path)).expect("opens to write");
+    assert_eq!(
+        (home.mode(&wal), home.mode(&shm)),
+        (0o600, 0o600),
+        "to write"
+    );
+    home.chmod(&wal, Mode::FILE);
+    home.chmod(&shm, Mode::FILE);
+    let read = block_on(home.opener().open_existing(&path)).expect("opens to read");
+    assert_eq!(
+        (home.mode(&wal), home.mode(&shm)),
+        (0o600, 0o600),
+        "to read"
+    );
+    drop((held, written, read));
+}
+
+impl Home {
+    /// The opener on this home's filesystem, which cannot set `refused`'s
+    /// mode.
+    fn refusing_mode(&self, refused: &Path) -> Opener {
+        let fs = Faulty {
+            fs: Rooted::new(self.rooted.root(), self.path()).unwrap(),
+            fault: Fault::NoMode(refused.to_path_buf()),
+        };
+        Opener::new(Arc::new(fs), FILE)
+    }
+}
+
+/// What a store at `path` is made its owner's through: its directory, the
+/// file, its log and its shared memory.
+fn made_private(path: &Path) -> [PathBuf; 4] {
+    [
+        path.parent().unwrap().to_path_buf(),
+        path.to_path_buf(),
+        beside(path, "-wal"),
+        beside(path, "-shm"),
+    ]
+}
+
+/// `error` is the opener's refusal to open what it could not make private,
+/// `refused`, with the filesystem's text.
+fn refused_private(error: &OpenError, refused: &Path) {
+    assert_eq!(error.code(), code!("restrict"), "{refused:?}: {error}");
+    assert_eq!(
+        args(error),
+        [
+            ("path", refused.display().to_string()),
+            ("ext_err_txt", "no mode set".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn test_a_write_open_of_a_store_that_cannot_be_made_its_owners_fails_naming_what() {
+    let home = Home::new();
+    let path = store_in(home.path(), "jolly-mute-magma");
+    for refused in made_private(&path) {
+        let error = block_on(home.refusing_mode(&refused).open_for_write(&path))
+            .map(drop)
+            .unwrap_err();
+        refused_private(&error, &refused);
+    }
+}
+
+#[test]
+fn test_a_read_open_of_a_store_that_cannot_be_made_its_owners_fails_naming_what() {
+    let home = Home::new();
+    let path = store_in(home.path(), "jolly-mute-magma");
+    written(&home, &path);
+    for refused in made_private(&path) {
+        let error = block_on(home.refusing_mode(&refused).open_existing(&path))
+            .map(drop)
+            .unwrap_err();
+        refused_private(&error, &refused);
+    }
 }

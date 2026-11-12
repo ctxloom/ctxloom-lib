@@ -21,7 +21,11 @@ fn every_code_is_under_the_crates_name_with_its_message() {
     let (name, text) = EN_US;
     assert_eq!(name, "sqlite-store-opener");
     let own = own();
-    assert_eq!(own.len(), 3, "create-dir, unplaced, predates-embedded");
+    assert_eq!(
+        own.len(),
+        4,
+        "create-dir, unplaced, predates-embedded, restrict"
+    );
     assert_eq!(angzarr_diagnostic::catalog::check(name, text, &own), []);
 }
 
@@ -44,6 +48,10 @@ fn each_error_displays_its_code_and_args_never_english() {
                 " path=/home/u/.demo/projects/jolly-mute-magma/store.db \
                  backup=/home/u/.demo/projects/jolly-mute-magma/store.db.pre-embedded"
             ),
+            concat!(
+                code!("restrict"),
+                r#" path=/home/u/.demo/projects/jolly-mute-magma/store.db-wal ext_err_txt="operation not permitted""#
+            ),
             "angzarr-ports-store-unavailable cause=angzarr-store-sqlite-unavailable cause.ext_err_txt=locked",
         ]
         .map(str::to_string)
@@ -58,6 +66,7 @@ fn the_codes_are_stable() {
         code!("predates-embedded"),
         "sqlite-store-opener-predates-embedded"
     );
+    assert_eq!(code!("restrict"), "sqlite-store-opener-restrict");
 }
 
 #[test]
@@ -84,6 +93,14 @@ fn each_error_gives_its_args_values() {
     };
     assert!(
         matches!(&error.args()[..], [("path", Arg::Str(p)), ("backup", Arg::Str(b))] if p == "p" && b == "b"),
+        "{error:?}"
+    );
+    let error = OpenError::Restrict {
+        path: "p".to_string(),
+        detail: "d".to_string(),
+    };
+    assert!(
+        matches!(&error.args()[..], [("path", Arg::Str(p)), ("ext_err_txt", Arg::Str(d))] if p == "p" && d == "d"),
         "{error:?}"
     );
 }
@@ -127,6 +144,12 @@ fn each_error_is_carried_in_a_store_error_by_its_code_and_args() {
     });
     assert_eq!(c.code, code!("predates-embedded"));
     assert_eq!(c.args, [("path", s("p")), ("backup", s("b"))]);
+    let c = cause(OpenError::Restrict {
+        path: "p".to_string(),
+        detail: "d".to_string(),
+    });
+    assert_eq!(c.code, code!("restrict"));
+    assert_eq!(c.args, [("path", s("p")), ("ext_err_txt", s("d"))]);
 }
 
 #[test]
