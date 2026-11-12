@@ -64,11 +64,22 @@ fn test_notices_under_text_are_words_with_their_fix() {
     );
 }
 
+// A json notice names its code, so a reader can tell one notice from another
+// without matching its words.
+#[test]
+fn test_a_json_notice_carries_its_code() {
+    let said = notices_said(Format::Json);
+    assert_eq!(said.lines().count(), 2, "{said}");
+    for line in said.lines() {
+        assert!(line.contains("\"code\":\"note\""), "{line}");
+    }
+}
+
 #[test]
 fn test_notices_under_json_are_lines_with_a_remedy_when_there_is_one() {
     assert_eq!(
         notices_said(Format::Json),
-        "{\"prog\":\"demo\",\"warning\":\"it broke\",\"remedy\":\"mend it\"}\n{\"prog\":\"demo\",\"warning\":\"only words\"}\n"
+        "{\"prog\":\"demo\",\"code\":\"note\",\"warning\":\"it broke\",\"remedy\":\"mend it\"}\n{\"prog\":\"demo\",\"code\":\"note\",\"warning\":\"only words\"}\n"
     );
 }
 
@@ -202,7 +213,7 @@ fn test_a_notice_without_a_fix_message_says_only_its_warning() {
     say_notices(&[Plain], "prog", Format::Json, &plain_catalog(), &mut json);
     assert_eq!(
         String::from_utf8(json).expect("utf-8"),
-        "{\"prog\":\"prog\",\"warning\":\"no \\\"remedy\\\" here\"}\n"
+        "{\"prog\":\"prog\",\"code\":\"plain\",\"warning\":\"no \\\"remedy\\\" here\"}\n"
     );
 }
 

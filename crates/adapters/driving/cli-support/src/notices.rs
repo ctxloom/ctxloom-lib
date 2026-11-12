@@ -11,6 +11,9 @@ use serde::Serialize;
 #[derive(Serialize)]
 struct Warning<'a> {
     prog: &'a str,
+    /// The notice's own code, so a reader tells notices apart without
+    /// matching their words.
+    code: &'a str,
     warning: &'a str,
     #[serde(skip_serializing_if = "str::is_empty")]
     remedy: &'a str,
@@ -46,7 +49,8 @@ pub(crate) fn fix_of(catalog: &Catalog, d: &dyn Diagnostic) -> Option<String> {
     catalog.render(&FixOf(d, format!("{}-fix", d.code()))).ok()
 }
 
-/// Say each notice on `err`: a json line under json, `prog: warning: ...`
+/// Say each notice on `err`: a json line under json (`prog`, the notice's
+/// `code`, `warning` and, when there is one, `remedy`), `prog: warning: ...`
 /// and its `  fix: ...` under text.
 pub fn say_notices<N: Diagnostic>(
     notices: &[N],
@@ -63,6 +67,7 @@ pub fn say_notices<N: Diagnostic>(
                 err,
                 &Warning {
                     prog: program,
+                    code: notice.code(),
                     warning: &message,
                     remedy: &remedy,
                 },
