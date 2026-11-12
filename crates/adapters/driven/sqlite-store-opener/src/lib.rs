@@ -24,6 +24,15 @@
 //!   it to (`<path>.pre-embedded`), and left exactly as it was: never
 //!   migrated in place. Its ledger is read before either open
 //!   ([`SqliteStore::ledger_at`]), which migrates nothing.
+//! - A store is its owner's alone: its directory 0700 (each one the open
+//!   makes, and the store's own made so if it was not) and the file, with
+//!   the `-wal` and `-shm` SQLite keeps beside it, 0600, set on every open,
+//!   to write or to read, whatever the umask, so an existing store open to
+//!   others is made its owner's on its next open. SQLite makes the log and
+//!   shared memory with the file's own mode. The modes are set through the
+//!   seam, which sets none on Windows: there the profile's ACL holds the
+//!   store. One that cannot be set fails the open
+//!   ([`OpenError::Restrict`]), the store closed.
 //! - [`Opener::check`] checks a database whole
 //!   ([`SqliteStore::integrity_check`]), opened afresh and read-only. Damage
 //!   is a key and its args, never English; a file too damaged to open is
@@ -33,6 +42,7 @@
 
 mod error;
 
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -45,6 +55,14 @@ use os::Mode;
 #[cfg(any(test, feature = "test-support"))]
 pub use error::diagnostic_samples;
 pub use error::{OpenError, EN_US};
+
+/// A directory only its owner may enter: a store's, and each one its open
+/// makes.
+const PRIVATE_DIR: Mode = Mode::from_bits(0o700);
+
+/// The files SQLite keeps beside a store in WAL mode, by the suffix on its
+/// file name: its log and its shared memory.
+const COMPANIONS: [&str; 2] = ["-wal", "-shm"];
 
 /// What [`Opener::check`] found at a path.
 #[derive(Debug, PartialEq)]
@@ -82,9 +100,8 @@ impl Opener {
     /// and migrated if need be.
     pub async fn open_for_write(&self, path: &Path) -> Result<SqliteStore, OpenError> {
         if let Some(dir) = path.parent() {
-            // As std's create_dir_all makes them: 0777 before the umask.
             self.fs
-                .create_dir_all(dir, Mode::from_bits(0o777))
+                .create_dir_all(dir, PRIVATE_DIR)
                 .map_err(|e| OpenError::CreateDir {
                     path: dir.display().to_string(),
                     detail: e.to_string(),
@@ -92,7 +109,8 @@ impl Opener {
         }
         let real = self.real(path)?;
         refuse_if_predates_embedded(&real, path).await?;
-        SqliteStore::open(&real).await.map_err(OpenError::Store)
+        let store = SqliteStore::open(&real).await.map_err(OpenError::Store)?;
+        self.private(path, store).await
     }
 
     /// The store at `path`, opened read-only (and migrated if need be);
@@ -100,9 +118,55 @@ impl Opener {
     pub async fn open_existing(&self, path: &Path) -> Result<Option<SqliteStore>, OpenError> {
         let real = self.real(path)?;
         refuse_if_predates_embedded(&real, path).await?;
-        SqliteStore::open_existing(&real)
+        match SqliteStore::open_existing(&real)
             .await
-            .map_err(OpenError::Store)
+            .map_err(OpenError::Store)?
+        {
+            Some(store) => self.private(path, store).await.map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// `store`, opened at `path`, once its directory is 0700 and its file,
+    /// log and shared memory 0600; closed, and the failure, if a mode
+    /// cannot be set. A log or shared memory that is not there is none to
+    /// set.
+    async fn private(&self, path: &Path, store: SqliteStore) -> Result<SqliteStore, OpenError> {
+        let restricted = self.restrict(path);
+        match restricted {
+            Ok(()) => Ok(store),
+            Err(error) => {
+                // The failure to make it private is the one said; the
+                // store is closed, never dropped, either way.
+                let _closed = store.close().await;
+                Err(error)
+            }
+        }
+    }
+
+    /// The store at `path` made its owner's: see [`Opener::private`].
+    fn restrict(&self, path: &Path) -> Result<(), OpenError> {
+        if let Some(dir) = path.parent() {
+            self.set_mode(dir, PRIVATE_DIR)?;
+        }
+        self.set_mode(path, Mode::PRIVATE_FILE)?;
+        for suffix in COMPANIONS {
+            let mut companion = path.as_os_str().to_owned();
+            companion.push(suffix);
+            let companion = Path::new(&companion);
+            match self.fs.set_permissions(companion, Mode::PRIVATE_FILE) {
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                set => set.map_err(|e| restrict_failed(companion, &e))?,
+            }
+        }
+        Ok(())
+    }
+
+    /// `path`'s mode set to `mode`.
+    fn set_mode(&self, path: &Path, mode: Mode) -> Result<(), OpenError> {
+        self.fs
+            .set_permissions(path, mode)
+            .map_err(|e| restrict_failed(path, &e))
     }
 
     /// The database at `path`, opened afresh and read-only, checked whole;
@@ -140,6 +204,14 @@ impl Opener {
             path: path.display().to_string(),
             detail: e.to_string(),
         })
+    }
+}
+
+/// The failure to set `path`'s mode.
+fn restrict_failed(path: &Path, error: &io::Error) -> OpenError {
+    OpenError::Restrict {
+        path: path.display().to_string(),
+        detail: error.to_string(),
     }
 }
 
