@@ -67,6 +67,7 @@ lint: lint-vocab lint-os lint-fixtures selftest-gate-kit lint-arch
     #!/usr/bin/env bash
     set -euo pipefail
     {{TOP}}/scripts/clippy-sync-check.sh --exact {{TOP}}/clippy.toml {{TOP}}/templates/clippy-disallowed.toml
+    {{TOP}}/scripts/drop-worktree.selftest.sh
     {{TOP}}/scripts/output-budget.selftest.sh
     {{TOP}}/scripts/arch-gates.selftest.sh
     # Clippy reads only the nearest clippy.toml, so the core's repeats the

@@ -26,6 +26,7 @@ fx() { # workspace, rules file: a fixture repository with the gate wired
   cp -R "$fixtures/$1/." "$d/"
   cp "$fixtures/$2" "$d/arch-rules.toml"
   cp "$top/gates/gates.just" "$d/gates/gates.just"
+  cp "$top/gates/drop-worktree.sh" "$d/gates/drop-worktree.sh"
   cp "$top/templates/arch-gates.just" "$d/gates/arch-gates.just"
   cat > "$d/justfile" <<J
 TOP := \`git rev-parse --show-toplevel\`
