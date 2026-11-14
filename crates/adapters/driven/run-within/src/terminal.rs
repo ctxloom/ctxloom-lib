@@ -3,7 +3,7 @@
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::{RunError, Spec, Within};
 
@@ -37,11 +37,13 @@ impl Stop {
 /// How a terminal run ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TerminalOutcome {
-    /// How the program ended: its own exit, or the kill a stop made.
+    /// How the program ended: its own exit (inside a stop's grace too), or
+    /// the kill a stop made once the grace was over.
     pub status: ExitStatus,
-    /// The program was killed because the [`Stop`] was requested while it
-    /// still ran. A program that exited by itself is not `stopped`, even if
-    /// the stop was requested at the same moment.
+    /// The [`Stop`] was requested while the program still ran, and it was
+    /// asked to stop, then killed if the grace passed. A program that exited
+    /// by itself before the request is not `stopped`, even if the stop was
+    /// requested at the same moment.
     pub stopped: bool,
 }
 
@@ -143,6 +145,11 @@ impl Running for Child {
     }
 
     fn request_stop(&mut self) -> bool {
+        // RED: no seam sends SIGTERM to one process. angzarr-platform's `os`
+        // (a35789e) asks only a whole group (`Tree::terminate_tree`), and a
+        // signal here would need std's unix extension or libc, which the OS
+        // rule keeps in `os`. Until `os` gives one, no ask is sent: the kill
+        // is at once, as on Windows.
         false
     }
 
@@ -156,48 +163,70 @@ impl Running for Child {
 }
 
 /// Ask until the program is over or the stop is requested; the exit is
-/// asked first, so a program that is over is never reported stopped.
+/// asked first, so a program that is over is never reported stopped. Once
+/// the stop is requested it is never looked at again, so a second request
+/// changes nothing.
 fn wait(
     child: &mut impl Running,
     spec: &Spec,
     stop: &Stop,
-    _grace: Duration,
+    grace: Duration,
 ) -> Result<TerminalOutcome, RunError> {
     loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                return Ok(TerminalOutcome {
-                    status,
-                    stopped: false,
-                })
-            }
-            Ok(None) => {}
-            Err(source) => {
-                let _ = child.kill();
-                return Err(RunError::Wait {
-                    program: spec.name(),
-                    source,
-                });
-            }
+        if let Some(status) = look(child, spec)? {
+            return Ok(TerminalOutcome {
+                status,
+                stopped: false,
+            });
         }
         if stop.is_requested() {
-            // RED: the ask is made, its grace not yet waited.
-            let _asked = child.request_stop();
-            child.kill().map_err(|source| RunError::Kill {
-                program: spec.name(),
-                source,
-            })?;
-            let status = child.wait().map_err(|source| RunError::Wait {
-                program: spec.name(),
-                source,
-            })?;
-            return Ok(TerminalOutcome {
+            return end(child, spec, grace).map(|status| TerminalOutcome {
                 status,
                 stopped: true,
             });
         }
         std::thread::sleep(POLL);
     }
+}
+
+/// Whether the program is over; a failed look kills it and is the error.
+fn look(child: &mut impl Running, spec: &Spec) -> Result<Option<ExitStatus>, RunError> {
+    match child.try_wait() {
+        Ok(over) => Ok(over),
+        Err(source) => {
+            let _ = child.kill();
+            Err(RunError::Wait {
+                program: spec.name(),
+                source,
+            })
+        }
+    }
+}
+
+/// Ask the program to stop and give it `grace` to exit; then kill it if it
+/// has not, and reap it. Its status: its own exit, or the kill's.
+fn end(child: &mut impl Running, spec: &Spec, grace: Duration) -> Result<ExitStatus, RunError> {
+    if child.request_stop() {
+        let deadline = Instant::now() + grace;
+        loop {
+            if let Some(status) = look(child, spec)? {
+                return Ok(status);
+            }
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                break;
+            }
+            std::thread::sleep(left.min(POLL));
+        }
+    }
+    child.kill().map_err(|source| RunError::Kill {
+        program: spec.name(),
+        source,
+    })?;
+    child.wait().map_err(|source| RunError::Wait {
+        program: spec.name(),
+        source,
+    })
 }
 
 #[cfg(test)]

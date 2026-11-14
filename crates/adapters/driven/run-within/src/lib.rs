@@ -57,11 +57,15 @@
 //!   from the terminal do not stop it (SIGTTIN), and a Ctrl-C at the
 //!   terminal reaches it and its descendants directly.
 //! - There is no deadline. The wait ends when the program exits, or when
-//!   the caller's [`Stop`] has been requested, which kills the DIRECT child
-//!   (SIGKILL on unix, `TerminateProcess` on Windows) and reports it
-//!   [`stopped`](TerminalOutcome::stopped). The caller turns the platform's
-//!   signals ([`os::Os::signals`]) into [`Stop::request`] on its own
-//!   runtime.
+//!   the caller's [`Stop`] has been requested, which asks the DIRECT child
+//!   to stop (SIGTERM on unix; Windows has no ask), gives it
+//!   [`Terminal::stop_grace`] to exit ([`run_terminal_with`]; [`run_terminal`]
+//!   gives [`Terminal::STOP_GRACE`]), then kills it if it has not (SIGKILL on
+//!   unix, `TerminateProcess` on Windows), reaps it, and reports it
+//!   [`stopped`](TerminalOutcome::stopped) with its status: its own exit
+//!   inside the grace, else the kill's. A second request during the grace
+//!   changes nothing. The caller turns the platform's signals
+//!   ([`os::Os::signals`]) into [`Stop::request`] on its own runtime.
 //! - The tree is NOT killed: with no group of its own there is no handle on
 //!   the descendants, and signalling the caller's own group would signal the
 //!   caller. A descendant outlives a stopped program unless the terminal
