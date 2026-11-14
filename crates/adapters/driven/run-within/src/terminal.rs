@@ -145,12 +145,9 @@ impl Running for Child {
     }
 
     fn request_stop(&mut self) -> bool {
-        // RED: no seam sends SIGTERM to one process. angzarr-platform's `os`
-        // (a35789e) asks only a whole group (`Tree::terminate_tree`), and a
-        // signal here would need std's unix extension or libc, which the OS
-        // rule keeps in `os`. Until `os` gives one, no ask is sent: the kill
-        // is at once, as on Windows.
-        false
+        // SIGTERM to this one process on unix (never the group, which is the
+        // caller's); nothing on Windows, where the kill is the stop.
+        os::process::request_stop(self)
     }
 
     fn kill(&mut self) -> std::io::Result<()> {
