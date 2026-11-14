@@ -144,7 +144,7 @@ pub use liveness::process_gone;
 pub use piped::{run_piped, Piped, Pipes};
 #[cfg(any(test, feature = "test-support"))]
 pub use script::install_script;
-pub use terminal::{run_terminal, Stop, TerminalOutcome};
+pub use terminal::{run_terminal, run_terminal_with, Stop, Terminal, TerminalOutcome};
 
 /// How often the program is asked whether it has exited, when nothing else
 /// wakes the wait.

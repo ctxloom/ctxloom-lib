@@ -16,7 +16,10 @@ use os::{Flavor, Mode};
 use super::*;
 use crate::install_script;
 
+/// Far longer than anything here takes, far shorter than a `sleep 30`.
 const PROMPT: Duration = Duration::from_secs(10);
+const TINY: Duration = Duration::from_millis(30);
+const LONG: Duration = Duration::from_secs(60);
 
 fn runs_scripts() -> bool {
     os::host().flavor() == Flavor::Unix
@@ -178,10 +181,23 @@ struct Fake {
     kill: Option<io::Error>,
     wait: Option<io::Error>,
     killed: bool,
+    /// Whether an ask to stop can be sent (unix's SIGTERM) or not (Windows).
+    can_ask: bool,
+    /// How many asks to stop were made, and when the first was.
+    asked: usize,
+    asked_at: Option<Instant>,
+    /// How many kills were made, and when the first was.
+    kills: usize,
+    killed_at: Option<Instant>,
+    /// A stop requested again at every look, as a second signal would.
+    again: Option<Stop>,
 }
 
 impl Running for Fake {
     fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
+        if let Some(stop) = &self.again {
+            stop.request();
+        }
         if self.asks.is_empty() {
             Ok(None)
         } else {
@@ -189,8 +205,16 @@ impl Running for Fake {
         }
     }
 
+    fn request_stop(&mut self) -> bool {
+        self.asked += 1;
+        self.asked_at.get_or_insert_with(Instant::now);
+        self.can_ask
+    }
+
     fn kill(&mut self) -> io::Result<()> {
         self.killed = true;
+        self.kills += 1;
+        self.killed_at.get_or_insert_with(Instant::now);
         self.kill.take().map_or(Ok(()), Err)
     }
 
@@ -215,7 +239,33 @@ fn fake(asks: Vec<io::Result<Option<ExitStatus>>>) -> Fake {
         kill: None,
         wait: None,
         killed: false,
+        can_ask: false,
+        asked: 0,
+        asked_at: None,
+        kills: 0,
+        killed_at: None,
+        again: None,
     }
+}
+
+/// A fake whose platform can ask a program to stop.
+fn asking(asks: Vec<io::Result<Option<ExitStatus>>>) -> Fake {
+    Fake {
+        can_ask: true,
+        ..fake(asks)
+    }
+}
+
+/// A stop already requested.
+fn requested() -> Stop {
+    let stop = Stop::new();
+    stop.request();
+    stop
+}
+
+/// How long after the ask the kill came.
+fn ask_to_kill(f: &Fake) -> Duration {
+    f.killed_at.unwrap() - f.asked_at.unwrap()
 }
 
 #[test]
@@ -224,7 +274,7 @@ fn a_failed_ask_kills_the_child_and_says_so() {
         return;
     }
     let mut f = fake(vec![Err(io::Error::other("lost"))]);
-    let error = wait(&mut f, &Spec::new("demo"), &Stop::new()).unwrap_err();
+    let error = wait(&mut f, &Spec::new("demo"), &Stop::new(), TINY).unwrap_err();
     assert!(matches!(error, RunError::Wait { .. }), "{error}");
     assert!(f.killed);
 }
@@ -238,7 +288,7 @@ fn a_failed_kill_at_the_stop_is_an_error_not_a_stop() {
     f.kill = Some(io::Error::other("denied"));
     let stop = Stop::new();
     stop.request();
-    let error = wait(&mut f, &Spec::new("demo"), &stop).unwrap_err();
+    let error = wait(&mut f, &Spec::new("demo"), &stop, TINY).unwrap_err();
     assert!(matches!(error, RunError::Kill { .. }), "{error}");
 }
 
@@ -251,7 +301,7 @@ fn a_failed_reap_after_the_kill_is_a_wait_error() {
     f.wait = Some(io::Error::other("lost"));
     let stop = Stop::new();
     stop.request();
-    let error = wait(&mut f, &Spec::new("demo"), &stop).unwrap_err();
+    let error = wait(&mut f, &Spec::new("demo"), &stop, TINY).unwrap_err();
     assert!(matches!(error, RunError::Wait { .. }), "{error}");
 }
 
@@ -262,9 +312,160 @@ fn a_child_still_running_is_asked_again_until_it_is_over() {
     }
     let status = exit_status();
     let mut f = fake(vec![Ok(None), Ok(None), Ok(Some(status))]);
-    let out = wait(&mut f, &Spec::new("demo"), &Stop::new()).unwrap();
+    let out = wait(&mut f, &Spec::new("demo"), &Stop::new(), TINY).unwrap();
     assert_eq!(out.status, status);
     assert!(!f.killed);
+}
+
+#[test]
+fn a_stop_asks_first_and_a_program_that_exits_in_the_grace_is_not_killed() {
+    if !runs_scripts() {
+        return;
+    }
+    let status = exit_status();
+    let mut f = asking(vec![Ok(None), Ok(None), Ok(Some(status))]);
+    let out = wait(&mut f, &Spec::new("demo"), &requested(), LONG).unwrap();
+    assert!(out.stopped);
+    assert_eq!(out.status, status, "its own exit, not a kill");
+    assert_eq!(f.asked, 1);
+    assert!(!f.killed);
+}
+
+#[test]
+fn a_program_that_ignores_the_ask_is_killed_once_the_grace_is_over_and_not_before() {
+    if !runs_scripts() {
+        return;
+    }
+    let grace = Duration::from_millis(200);
+    let mut f = asking(vec![]);
+    let out = wait(&mut f, &Spec::new("demo"), &requested(), grace).unwrap();
+    assert!(out.stopped);
+    assert_eq!((f.asked, f.kills), (1, 1));
+    let after = ask_to_kill(&f);
+    assert!(
+        after >= grace,
+        "killed before the grace was over: {after:?}"
+    );
+    assert!(after < PROMPT, "the kill took {after:?}");
+}
+
+#[test]
+fn a_second_request_during_the_grace_changes_nothing() {
+    if !runs_scripts() {
+        return;
+    }
+    let grace = Duration::from_millis(200);
+    let stop = requested();
+    let mut f = asking(vec![]);
+    f.again = Some(stop.clone());
+    let out = wait(&mut f, &Spec::new("demo"), &stop, grace).unwrap();
+    assert!(out.stopped);
+    assert_eq!((f.asked, f.kills), (1, 1), "one ask, one kill");
+    let after = ask_to_kill(&f);
+    assert!(
+        after >= grace,
+        "the second request cut the grace: {after:?}"
+    );
+}
+
+#[test]
+fn where_no_ask_can_be_sent_the_kill_is_at_once() {
+    if !runs_scripts() {
+        return;
+    }
+    let mut f = fake(vec![]);
+    let out = wait(&mut f, &Spec::new("demo"), &requested(), LONG).unwrap();
+    assert!(out.stopped);
+    assert_eq!((f.asked, f.kills), (1, 1));
+    assert!(ask_to_kill(&f) < PROMPT, "the grace was waited for");
+}
+
+#[test]
+fn a_failed_look_during_the_grace_kills_the_program_and_says_so() {
+    if !runs_scripts() {
+        return;
+    }
+    let mut f = asking(vec![Ok(None), Err(io::Error::other("lost"))]);
+    let error = wait(&mut f, &Spec::new("demo"), &requested(), LONG).unwrap_err();
+    assert!(matches!(error, RunError::Wait { .. }), "{error}");
+    assert!(f.killed);
+}
+
+#[test]
+fn a_failed_kill_after_the_grace_is_a_kill_error() {
+    if !runs_scripts() {
+        return;
+    }
+    let mut f = asking(vec![]);
+    f.kill = Some(io::Error::other("denied"));
+    let error = wait(&mut f, &Spec::new("demo"), &requested(), TINY).unwrap_err();
+    assert!(matches!(error, RunError::Kill { .. }), "{error}");
+}
+
+#[test]
+fn the_default_grace_is_withins_and_the_caller_sets_its_own() {
+    assert_eq!(Terminal::STOP_GRACE, Within::STOP_GRACE);
+    assert_eq!(Terminal::new().stop_grace, Duration::from_secs(5));
+    assert_eq!(Terminal::default(), Terminal::new());
+    assert_eq!(Terminal::new().stop_grace(TINY).stop_grace, TINY);
+}
+
+// --- a stop of a real program
+
+/// `body` run on the terminal until it is over, with a stop requested once
+/// it says it is ready (`ready` in the body is a command that says so: it
+/// touches a file the test watches), so its traps are set before the ask.
+fn stopped(body: &str, terminal: &Terminal) -> (TerminalOutcome, Duration) {
+    let machine = Machine::new();
+    let ready = machine.dir.join("ready");
+    let real = machine.note("ready");
+    let spec = machine.spec(&body.replace("ready", &format!(": > '{}'", real.display())));
+    let stop = Stop::new();
+    let began = Instant::now();
+    let run = {
+        let (stop, terminal) = (stop.clone(), *terminal);
+        std::thread::spawn(move || run_terminal_with(&spec, &terminal, &stop, |_| {}).unwrap())
+    };
+    let deadline = Instant::now() + PROMPT;
+    while !machine.fs.exists(&ready).unwrap() && Instant::now() < deadline {
+        std::thread::yield_now();
+    }
+    stop.request();
+    let out = run.join().unwrap();
+    (out, began.elapsed())
+}
+
+#[test]
+fn a_program_that_hears_the_ask_exits_on_its_own_terms() {
+    if !runs_scripts() {
+        return;
+    }
+    // Its own `sleep` is ended by its trap: nothing it started outlives it
+    // holding the test's stdout.
+    let (out, took) = stopped(
+        "trap 'kill $!; exit 7' TERM; ready; sleep 30 >/dev/null 2>&1 & wait",
+        &Terminal::new().stop_grace(LONG),
+    );
+    assert!(out.stopped);
+    assert_eq!(out.status.code(), Some(7), "the ask, not a kill, ended it");
+    assert!(took < PROMPT, "the stop took {took:?}");
+}
+
+#[test]
+fn a_program_that_ignores_the_ask_is_killed_once_the_grace_is_over() {
+    if !runs_scripts() {
+        return;
+    }
+    let grace = Duration::from_millis(300);
+    // The ignored TERM survives the exec, so the direct child is the sleep.
+    let (out, took) = stopped(
+        "trap '' TERM; ready; exec sleep 30",
+        &Terminal::new().stop_grace(grace),
+    );
+    assert!(out.stopped);
+    assert_eq!(out.status.code(), None, "a kill ended it");
+    assert!(took >= grace, "killed before the grace was over: {took:?}");
+    assert!(took < PROMPT, "the stop took {took:?}");
 }
 
 // --- inherited stdio, proved in a process whose stdio the test owns
