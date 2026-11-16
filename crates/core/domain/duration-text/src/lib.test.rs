@@ -56,6 +56,13 @@ const TABLE: &[Row] = &[
     Row { text: "0d", prune: None, rs: s(0), tags: s(0), grammar: Secs(0), why: "intended: 0d is valid (owner); prune refused it as not positive, so prune's caller keeps that check if it wants it" },
     Row { text: "0s", prune: None, rs: None, tags: s(0), grammar: Secs(0), why: "intended: 0 of a unit is valid" },
     Row { text: "0", prune: None, rs: None, tags: None, grammar: Refused("no-unit"), why: SAME },
+    // The word `now`: no time at all (owner, 2026-11-15), lowercase only, as a unit is.
+    Row { text: "now", prune: None, rs: None, tags: None, grammar: Secs(0), why: "intended: `now` is zero (owner, 2026-11-15: a consumer's drain or stop at once)" },
+    Row { text: " now ", prune: None, rs: None, tags: None, grammar: Secs(0), why: "intended: `now` is zero, whitespace around it ignored" },
+    Row { text: "NOW", prune: None, rs: None, tags: None, grammar: Refused("malformed"), why: SAME },
+    Row { text: "Now", prune: None, rs: None, tags: None, grammar: Refused("malformed"), why: SAME },
+    Row { text: "now1s", prune: None, rs: None, tags: None, grammar: Refused("malformed"), why: SAME },
+    Row { text: "1snow", prune: None, rs: None, tags: None, grammar: Refused("unknown-unit"), why: SAME },
     // Units: s m h d w.
     Row { text: "90m", prune: s(5_400), rs: None, tags: s(5_400), grammar: Secs(5_400), why: "intended: rs read only d w h" },
     Row { text: "45s", prune: s(45), rs: None, tags: s(45), grammar: Secs(45), why: "intended: rs read only d w h" },
@@ -273,6 +280,7 @@ fn a_span_cutoff_is_that_long_before_now_keeping_its_fraction() {
         ("720h", 2_592_000),
         ("1h30m", 5_400),
         ("0d", 0),
+        ("now", 0),
     ] {
         assert_eq!(
             cutoff_at(text, NOW()),
