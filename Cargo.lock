@@ -25,7 +25,7 @@ source = "git+https://github.com/angzarr-io/angzarr?rev=f6fed5e53c1d17bf7d7c23c9
 [[package]]
 name = "angzarr-embedded"
 version = "0.1.0"
-source = "git+https://github.com/angzarr-io/angzarr-embedded?rev=94f630a38f5fc79657fb09bbc73f7def27d31335#94f630a38f5fc79657fb09bbc73f7def27d31335"
+source = "git+https://github.com/angzarr-io/angzarr-embedded?rev=5cee822bf063a6e070545d14c0ec0caf387022f3#5cee822bf063a6e070545d14c0ec0caf387022f3"
 dependencies = [
  "angzarr-diagnostic",
  "angzarr-ports",
@@ -101,7 +101,7 @@ dependencies = [
 [[package]]
 name = "angzarr-store-sqlite"
 version = "0.1.0"
-source = "git+https://github.com/angzarr-io/angzarr-embedded?rev=94f630a38f5fc79657fb09bbc73f7def27d31335#94f630a38f5fc79657fb09bbc73f7def27d31335"
+source = "git+https://github.com/angzarr-io/angzarr-embedded?rev=5cee822bf063a6e070545d14c0ec0caf387022f3#5cee822bf063a6e070545d14c0ec0caf387022f3"
 dependencies = [
  "angzarr-diagnostic",
  "angzarr-ports",

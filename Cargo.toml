@@ -25,7 +25,7 @@ angzarr-presentation = { git = "https://github.com/angzarr-io/angzarr", rev = "f
 os = { git = "https://github.com/angzarr-io/angzarr-platform", rev = "5f39b330f4ef19a27b8a4ac533402b07c3221ac5" }
 file-system = { git = "https://github.com/angzarr-io/angzarr-platform", rev = "5f39b330f4ef19a27b8a4ac533402b07c3221ac5" }
 # angzarr-embedded (its `sqlite` feature re-exports the SQLite store).
-angzarr-embedded = { git = "https://github.com/angzarr-io/angzarr-embedded", rev = "94f630a38f5fc79657fb09bbc73f7def27d31335" }
+angzarr-embedded = { git = "https://github.com/angzarr-io/angzarr-embedded", rev = "5cee822bf063a6e070545d14c0ec0caf387022f3" }
 
 # This repository's own crates.
 cli-support = { path = "crates/adapters/driving/cli-support" }
