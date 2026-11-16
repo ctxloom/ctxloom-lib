@@ -30,7 +30,8 @@ it is not a crate.
 ## duration-text
 
 `1h30m`, `2w1d`, `1.5d`, `0d`: units `s m h d w` (fixed lengths), longest to
-shortest, each once; fractions; no bare number, sign or inner space. A
+shortest, each once; fractions; no bare number, sign or inner space; the
+word `now` is zero. A
 cutoff is a span before now or a `YYYY-MM-DD` date at 00:00 UTC. The crate
 reads no clock: build a `DurationText` over a closure on your own clock (or a
 fixed `SystemTime` in tests), and `frozen()` it to judge many items against

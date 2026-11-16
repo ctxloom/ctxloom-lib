@@ -58,7 +58,7 @@ adapters, root helpers and a little pure core, so far:
 
 - `core/domain`: pure computation (no I/O, clock or environment; "now"
   arrives as an argument or a factory): `duration-text`, the grammar of a
-  span or a date as text; `exit-code`, the exit-code convention as a type. The core's purity rules (`crates/core/clippy.toml`)
+  span or a date as text (`now` is zero); `exit-code`, the exit-code convention as a type. The core's purity rules (`crates/core/clippy.toml`)
   repeat the root's, since clippy reads the nearest `clippy.toml`; `just lint`
   checks the nesting threshold and every OS-rule entry are in it. A further
   core role (`core/ports`, ...) appears only if a crate needs it. A crate takes plain

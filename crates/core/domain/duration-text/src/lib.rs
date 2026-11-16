@@ -18,6 +18,9 @@
 //! - A bare number (`30`, `0`) is refused: a span always has a unit.
 //! - No sign (`-3d` and `+3d` are refused), no inner whitespace; whitespace
 //!   around the whole text is ignored.
+//! - The word `now`, lowercase, is a span of no time (zero), as `0s` is:
+//!   "at once" where a caller reads a span of waiting, "this instant" as a
+//!   cutoff.
 //!
 //! # Rounding
 //!
@@ -52,6 +55,9 @@ pub use error::{DurationError, EN_US};
 
 #[cfg(any(test, feature = "test-support"))]
 pub use error::diagnostic_samples;
+
+/// The word that is a span of no time.
+pub const NOW: &str = "now";
 
 /// A fraction's digits that are read: 18.
 const FRACTION_DIGITS: usize = 18;
@@ -177,12 +183,15 @@ pub fn cutoff_at(text: &str, now: SystemTime) -> Result<SystemTime, DurationErro
     }
 }
 
-/// `text` as a span of whole seconds.
+/// `text` as a span of whole seconds; [`NOW`] is zero.
 pub fn parse(text: &str) -> Result<Duration, DurationError> {
     let text = text.trim();
     let owned = || text.to_string();
     if text.is_empty() {
         return Err(DurationError::Empty);
+    }
+    if text == NOW {
+        return Ok(Duration::ZERO);
     }
     if text.contains(char::is_whitespace) {
         return Err(DurationError::Whitespace { text: owned() });
