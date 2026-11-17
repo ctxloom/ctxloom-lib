@@ -569,7 +569,7 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 [[package]]
 name = "file-system"
 version = "0.1.0"
-source = "git+https://github.com/angzarr-io/angzarr-platform?rev=5f39b330f4ef19a27b8a4ac533402b07c3221ac5#5f39b330f4ef19a27b8a4ac533402b07c3221ac5"
+source = "git+https://github.com/angzarr-io/angzarr-platform?rev=8e4aa9a16302933eb0f6e9647b39c03c0aead197#8e4aa9a16302933eb0f6e9647b39c03c0aead197"
 dependencies = [
  "angzarr-diagnostic",
  "os",
@@ -1210,7 +1210,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 [[package]]
 name = "os"
 version = "0.1.0"
-source = "git+https://github.com/angzarr-io/angzarr-platform?rev=5f39b330f4ef19a27b8a4ac533402b07c3221ac5#5f39b330f4ef19a27b8a4ac533402b07c3221ac5"
+source = "git+https://github.com/angzarr-io/angzarr-platform?rev=8e4aa9a16302933eb0f6e9647b39c03c0aead197#8e4aa9a16302933eb0f6e9647b39c03c0aead197"
 dependencies = [
  "fs4",
  "junction",
