@@ -22,8 +22,8 @@ angzarr-diagnostic = { git = "https://github.com/angzarr-io/angzarr", rev = "b14
 angzarr-yaml = { git = "https://github.com/angzarr-io/angzarr", rev = "b1445adf7450b09aad19b5ce09fdf6742da1f5b0" }
 angzarr-presentation = { git = "https://github.com/angzarr-io/angzarr", rev = "b1445adf7450b09aad19b5ce09fdf6742da1f5b0" }
 # angzarr-platform (the OS seam and the filesystem seam over it).
-os = { git = "https://github.com/angzarr-io/angzarr-platform", rev = "efbc2f6e68110777b6f215c9755dfee27d6142b7" }
-file-system = { git = "https://github.com/angzarr-io/angzarr-platform", rev = "efbc2f6e68110777b6f215c9755dfee27d6142b7" }
+os = { git = "https://github.com/angzarr-io/angzarr-platform", rev = "a930373b2a2c25d46a8bd5e5147cf8a8546cfaf6" }
+file-system = { git = "https://github.com/angzarr-io/angzarr-platform", rev = "a930373b2a2c25d46a8bd5e5147cf8a8546cfaf6" }
 # angzarr-embedded (its `sqlite` feature re-exports the SQLite store).
 angzarr-embedded = { git = "https://github.com/angzarr-io/angzarr-embedded", rev = "5cdb1906ff279e329805331e5dac18498319943a" }
 
