@@ -64,7 +64,5 @@ crate. To build a consumer against a local checkout, see `CLAUDE.md`.
 
 ## Licence
 
-AGPL-3.0-only: see [LICENSE](LICENSE).
-
-Commercial licensing: this project is also available under a commercial
-licence. The author is open to it; contact Benjamin Abbitt.
+Apache-2.0 OR BSD-3-Clause, at your option: see [LICENSE-APACHE](LICENSE-APACHE)
+and [LICENSE-BSD](LICENSE-BSD).

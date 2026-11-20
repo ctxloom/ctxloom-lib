@@ -19,9 +19,8 @@ ignore = [
 
 [licenses]
 version = 2
-# ctxloom-lib is AGPL-3.0-only; every license here may be combined with it.
+# ctxloom-lib is Apache-2.0 OR BSD-3-Clause; every license here is permissive.
 allow = [
-  "AGPL-3.0-only",
   "Apache-2.0",
   "BSD-3-Clause",
   "MIT",

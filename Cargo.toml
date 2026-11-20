@@ -8,7 +8,7 @@ edition = "2021"
 # claim would be false for CI. ctxloom-rs, which declares 1.85, re-checks its
 # own claim when it first links this repository.
 rust-version = "1.96"
-license = "AGPL-3.0-only"
+license = "Apache-2.0 OR BSD-3-Clause"
 publish = false
 
 [workspace.dependencies]
