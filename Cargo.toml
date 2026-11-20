@@ -18,14 +18,14 @@ publish = false
 # a branch.
 #
 # angzarr core (angzarr-diagnostic, angzarr-yaml, angzarr-presentation).
-angzarr-diagnostic = { git = "https://github.com/angzarr-io/angzarr", rev = "e532d31337e179339b26daa9b11406d8f4ec9a68" }
-angzarr-yaml = { git = "https://github.com/angzarr-io/angzarr", rev = "e532d31337e179339b26daa9b11406d8f4ec9a68" }
-angzarr-presentation = { git = "https://github.com/angzarr-io/angzarr", rev = "e532d31337e179339b26daa9b11406d8f4ec9a68" }
+angzarr-diagnostic = { git = "https://github.com/angzarr-io/angzarr", rev = "3535a54a25e95b57dabbcbaea5f3603b1ac13f5c" }
+angzarr-yaml = { git = "https://github.com/angzarr-io/angzarr", rev = "3535a54a25e95b57dabbcbaea5f3603b1ac13f5c" }
+angzarr-presentation = { git = "https://github.com/angzarr-io/angzarr", rev = "3535a54a25e95b57dabbcbaea5f3603b1ac13f5c" }
 # angzarr-platform (the OS seam and the filesystem seam over it).
-os = { git = "https://github.com/angzarr-io/angzarr-platform", rev = "ae7ceb1193c795bc423f1d8b6d1e467fc7c5878d" }
-file-system = { git = "https://github.com/angzarr-io/angzarr-platform", rev = "ae7ceb1193c795bc423f1d8b6d1e467fc7c5878d" }
+os = { git = "https://github.com/angzarr-io/angzarr-platform", rev = "f5ec66ded9a0490b1c47f3de270cfeba7b754aba" }
+file-system = { git = "https://github.com/angzarr-io/angzarr-platform", rev = "f5ec66ded9a0490b1c47f3de270cfeba7b754aba" }
 # angzarr-embedded (its `sqlite` feature re-exports the SQLite store).
-angzarr-embedded = { git = "https://github.com/angzarr-io/angzarr-embedded", rev = "059dd7fe9f8bc297404e4ac51de9efa9098e5698" }
+angzarr-embedded = { git = "https://github.com/angzarr-io/angzarr-embedded", rev = "bce1ff2ed813c72b869bbbfcdb7ba9b426e47812" }
 
 # This repository's own crates.
 cli-support = { path = "crates/adapters/driving/cli-support" }
